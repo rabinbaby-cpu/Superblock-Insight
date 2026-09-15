@@ -16,8 +16,8 @@ export function BrandMark({ compact = false }: { compact?: boolean }) {
       {!compact && (
         <div className="min-w-0 leading-none">
           <div className="text-[14px] font-semibold tracking-[-0.025em]">Superblock</div>
-          <div className="mt-1 flex items-center gap-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-            Analytics Studio <span className="size-1 rounded-full bg-primary" />
+          <div className="mt-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            Analytics Studio <span className="size-1.5 rounded-full bg-primary" />
           </div>
         </div>
       )}
@@ -52,7 +52,7 @@ const badgeMap: Record<string, string> = {
 };
 
 export function StatusBadge({ status, dot = true }: { status: string; dot?: boolean }) {
-  return <span className={cn("status-badge", badgeMap[status] || "status-neutral")}>{dot && <span className="size-1.5 rounded-full bg-current opacity-80" />}{status}</span>;
+  return <span className={cn("status-badge", badgeMap[status] || "status-neutral")}>{dot && <span className="size-2 rounded-full bg-current opacity-80" />}{status}</span>;
 }
 
 export function PageHeader({ eyebrow, title, description, actions }: { eyebrow?: string; title: string; description?: string; actions?: ReactNode }) {
@@ -87,13 +87,13 @@ export function KpiCard({ label, value, change, comparison, spark, icon: Icon, l
   return (
     <div className="metric-card group">
       <div className="flex items-start justify-between gap-2">
-        <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">{label}</div>
+        <div className="text-[12px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">{label}</div>
         <span className="metric-icon"><Icon className="size-3.5" /></span>
       </div>
       <div className="mt-3 flex items-end justify-between gap-3">
         <div>
           <div className="font-tabular text-[25px] font-semibold leading-none tracking-[-0.04em]">{value}</div>
-          <div className="mt-2 flex items-center gap-1.5 text-[10px] text-muted-foreground">
+          <div className="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
             <span className={cn("inline-flex items-center font-semibold", positive ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400")}>
               {positive ? <ArrowUpRight className="size-3" /> : <ArrowDownRight className="size-3" />}{Math.abs(change)}%
             </span>
@@ -125,7 +125,7 @@ export function AnalyticsToolbar({ dateRange, setDateRange, onExport, onRefresh,
         </Select>
         {showCustomer && <Button variant="outline" size="sm" className="h-8 bg-card text-xs"><SlidersHorizontal className="size-3.5" /> Customers <ChevronDown className="size-3" /></Button>}
         <Button variant="outline" size="sm" className="h-8 bg-card text-xs"><BarChart3 className="size-3.5" /> All channels <ChevronDown className="size-3" /></Button>
-        <span className="hidden items-center gap-2 px-2 text-[11px] text-muted-foreground xl:flex"><span className="size-1.5 rounded-full bg-emerald-500" />Live data simulation</span>
+        <span className="hidden items-center gap-2 px-2 text-[12px] text-muted-foreground xl:flex"><span className="size-2 rounded-full bg-emerald-500" />Live data simulation</span>
       </div>
       <div className="flex items-center gap-2">
         <Button variant="outline" size="sm" className="h-8 bg-card text-xs" onClick={onRefresh} disabled={loading}><RefreshCw className={cn("size-3.5", loading && "animate-spin")} /> Refresh</Button>
@@ -170,7 +170,7 @@ export function ErrorState({ onRetry }: { onRetry: () => void }) {
 }
 
 export function Avatar({ initials, size = "md", className }: { initials: string; size?: "sm" | "md" | "lg"; className?: string }) {
-  return <span className={cn("avatar", size === "sm" && "size-6 text-[9px]", size === "md" && "size-8 text-[10px]", size === "lg" && "size-12 text-[14px]", className)}>{initials}</span>;
+  return <span className={cn("avatar", size === "sm" && "size-6 text-[10px]", size === "md" && "size-8 text-[11px]", size === "lg" && "size-12 text-[14px]", className)}>{initials}</span>;
 }
 
 export function downloadCsv(filename: string, rows: Record<string, string | number | boolean | undefined>[]) {

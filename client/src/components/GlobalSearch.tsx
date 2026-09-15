@@ -31,13 +31,13 @@ export function GlobalSearch() {
                 <CommandGroup heading={group.type}>
                   {group.items.map((item) => {
                     const Icon = icons[item.type as keyof typeof icons] || Search;
-                    return <CommandItem key={`${item.type}-${item.title}`} value={`${item.type}-${item.title}`} className="gap-3 py-2" onSelect={() => { navigate(item.href); setSearchOpen(false); }}><span className="grid size-7 place-items-center rounded-md border bg-muted/40"><Icon className="size-3.5" /></span><div className="min-w-0"><div className="truncate text-xs font-medium">{item.title}</div><div className="truncate text-[10px] text-muted-foreground">{item.detail}</div></div><span className="ml-auto text-[9px] uppercase tracking-[0.08em] text-muted-foreground">{item.type}</span></CommandItem>;
+                    return <CommandItem key={`${item.type}-${item.title}`} value={`${item.type}-${item.title}`} className="gap-3 py-2" onSelect={() => { navigate(item.href); setSearchOpen(false); }}><span className="grid size-7 place-items-center rounded-md border bg-muted/40"><Icon className="size-3.5" /></span><div className="min-w-0"><div className="truncate text-xs font-medium">{item.title}</div><div className="truncate text-[11px] text-muted-foreground">{item.detail}</div></div><span className="ml-auto text-[10px] uppercase tracking-[0.08em] text-muted-foreground">{item.type}</span></CommandItem>;
                   })}
                 </CommandGroup>
               </div>
             ))}
           </CommandList>
-          <div className="flex items-center justify-between border-t bg-muted/30 px-3 py-2 text-[9px] text-muted-foreground"><span>Search across your Superblock workspace</span><div className="flex gap-2"><span>↑↓ Navigate</span><span>↵ Open</span><span>esc Close</span></div></div>
+          <div className="flex items-center justify-between border-t bg-muted/30 px-3 py-2 text-[10px] text-muted-foreground"><span>Search across your Superblock workspace</span><div className="flex gap-2"><span>↑↓ Navigate</span><span>↵ Open</span><span>esc Close</span></div></div>
         </Command>
       </DialogContent>
     </Dialog>

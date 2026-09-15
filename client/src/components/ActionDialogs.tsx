@@ -34,5 +34,5 @@ export function QuickFormDialog({ trigger, title, description, type = "general" 
 
 export function CopyButton({ value, label = "Copy" }: { value: string; label?: string }) {
   const [copied, setCopied] = useState(false);
-  return <Button variant="ghost" size="sm" className="h-7 text-[10px]" onClick={async () => { await navigator.clipboard.writeText(value); setCopied(true); toast.success("Copied to clipboard"); window.setTimeout(() => setCopied(false), 1200); }}>{copied ? <Check className="size-3 text-emerald-500" /> : <Copy className="size-3" />}{copied ? "Copied" : label}</Button>;
+  return <Button variant="ghost" size="sm" className="h-7 text-[11px]" onClick={async () => { await navigator.clipboard.writeText(value); setCopied(true); toast.success("Copied to clipboard"); window.setTimeout(() => setCopied(false), 1200); }}>{copied ? <Check className="size-3 text-emerald-500" /> : <Copy className="size-3" />}{copied ? "Copied" : label}</Button>;
 }

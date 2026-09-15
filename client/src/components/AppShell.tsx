@@ -56,7 +56,7 @@ function NavContent({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?
       <div className="flex-1 overflow-y-auto px-2 py-3">
         {sections.map((section) => (
           <div key={section.label} className="mb-4">
-            {!collapsed && <div className="px-2 pb-1.5 text-[9px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/80">{section.label}</div>}
+            {!collapsed && <div className="px-2 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/80">{section.label}</div>}
             <nav className="space-y-0.5">
               {section.items.map((item) => {
                 const active = location === item.href || (item.href === "/customers" && location.startsWith("/customers/"));
@@ -64,7 +64,7 @@ function NavContent({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?
                   <Link href={item.href} onClick={onNavigate} className={cn("sidebar-link", active && "active", collapsed && "justify-center px-0")}>
                     <item.icon className="size-[15px] shrink-0" />
                     {!collapsed && <span className="truncate">{item.title}</span>}
-                    {!collapsed && active && <span className="ml-auto size-1.5 rounded-full bg-primary" />}
+                    {!collapsed && active && <span className="ml-auto size-2 rounded-full bg-primary" />}
                   </Link>
                 );
                 return collapsed ? <Tooltip key={item.href}><TooltipTrigger asChild>{content}</TooltipTrigger><TooltipContent side="right">{item.title}</TooltipContent></Tooltip> : <div key={item.href}>{content}</div>;
@@ -80,7 +80,7 @@ function NavContent({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?
         {!collapsed && (
           <div className="mt-2 flex items-center gap-2 rounded-lg border border-sidebar-border bg-sidebar-accent/45 p-2">
             <Avatar initials="SH" size="sm" />
-            <div className="min-w-0 flex-1"><div className="truncate text-[11px] font-semibold">Superblock HQ</div><div className="text-[9px] text-muted-foreground">Enterprise workspace</div></div>
+            <div className="min-w-0 flex-1"><div className="truncate text-[12px] font-semibold">Superblock HQ</div><div className="text-[10px] text-muted-foreground">Enterprise workspace</div></div>
             <ChevronDown className="size-3 text-muted-foreground" />
           </div>
         )}
@@ -109,27 +109,27 @@ export function AppShell({ children, breadcrumbs }: { children: ReactNode; bread
         <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-border/70 bg-background/92 px-4 backdrop-blur-xl lg:px-5">
           <div className="flex min-w-0 items-center gap-3">
             <Button variant="ghost" size="icon" className="size-8 lg:hidden" onClick={() => setMobileNavOpen(true)}><Menu className="size-4" /></Button>
-            <div className="hidden items-center gap-1.5 text-[11px] sm:flex">
+            <div className="hidden items-center gap-1.5 text-[12px] sm:flex">
               <span className="text-muted-foreground">Superblock HQ</span>
               {breadcrumbs?.map((item, index) => <span key={`${item}-${index}`} className="flex items-center gap-1.5"><span className="text-muted-foreground/50">/</span><span className={index === breadcrumbs.length - 1 ? "font-medium text-foreground" : "text-muted-foreground"}>{item}</span></span>)}
             </div>
           </div>
           <div className="flex items-center gap-1.5">
             <button className="header-search" onClick={() => setSearchOpen(true)}>
-              <Search className="size-3.5" /><span className="hidden sm:inline">Search workspace</span><kbd className="ml-auto hidden rounded border bg-background px-1.5 py-0.5 font-sans text-[9px] text-muted-foreground md:block">⌘ K</kbd>
+              <Search className="size-3.5" /><span className="hidden sm:inline">Search workspace</span><kbd className="ml-auto hidden rounded border bg-background px-1.5 py-0.5 font-sans text-[10px] text-muted-foreground md:block">⌘ K</kbd>
             </button>
             <DropdownMenu>
-              <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="relative size-8"><Bell className="size-4" /><span className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-primary ring-2 ring-background" /></Button></DropdownMenuTrigger>
+              <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="relative size-8"><Bell className="size-4" /><span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-primary ring-2 ring-background" /></Button></DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-80">
-                <DropdownMenuLabel className="flex items-center justify-between text-xs">Notifications <span className="text-[10px] font-normal text-muted-foreground">3 unread</span></DropdownMenuLabel>
+                <DropdownMenuLabel className="flex items-center justify-between text-xs">Notifications <span className="text-[11px] font-normal text-muted-foreground">3 unread</span></DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                {["Northstar renewal is due in 9 days", "Invoice INV-20242 is overdue", "Acme Commerce crossed 1M messages"].map((item, index) => <DropdownMenuItem key={item} className="items-start gap-2 py-2.5"><span className={cn("mt-1.5 size-1.5 rounded-full", index === 1 ? "bg-rose-500" : "bg-primary")} /><div><div className="text-xs leading-5">{item}</div><div className="text-[10px] text-muted-foreground">{index + 1} hr ago</div></div></DropdownMenuItem>)}
+                {["Northstar renewal is due in 9 days", "Invoice INV-20242 is overdue", "Acme Commerce crossed 1M messages"].map((item, index) => <DropdownMenuItem key={item} className="items-start gap-2 py-2.5"><span className={cn("mt-1.5 size-2 rounded-full", index === 1 ? "bg-rose-500" : "bg-primary")} /><div><div className="text-xs leading-5">{item}</div><div className="text-[11px] text-muted-foreground">{index + 1} hr ago</div></div></DropdownMenuItem>)}
               </DropdownMenuContent>
             </DropdownMenu>
             <DropdownMenu>
               <DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 gap-2 px-1.5"><Avatar initials="AS" size="sm" /><ChevronDown className="hidden size-3 text-muted-foreground sm:block" /></Button></DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuLabel><div className="text-xs">Anika Shah</div><div className="text-[10px] font-normal text-muted-foreground">anika@superblock.chat</div></DropdownMenuLabel>
+                <DropdownMenuLabel><div className="text-xs">Anika Shah</div><div className="text-[11px] font-normal text-muted-foreground">anika@superblock.chat</div></DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>{theme === "dark" ? <Sun className="size-3.5" /> : <Moon className="size-3.5" />}Switch to {theme === "dark" ? "light" : "dark"}</DropdownMenuItem>
                 <DropdownMenuItem asChild><Link href="/settings"><Settings className="size-3.5" />Settings</Link></DropdownMenuItem>

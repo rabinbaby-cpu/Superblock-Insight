@@ -67,11 +67,11 @@ export default function Customers() {
           <FilterSelect value={status} onChange={(value) => { setStatus(value); setPage(1); }} items={["All statuses", "Active", "Paid", "Trial", "Renewal Due", "Suspended", "Expired"]} />
           <FilterSelect value={plan} onChange={(value) => { setPlan(value); setPage(1); }} items={["All plans", "Starter", "Growth", "Advanced", "Custom"]} />
           <FilterSelect value={health} onChange={(value) => { setHealth(value); setPage(1); }} items={["All health", "Healthy", "At Risk", "Expansion", "Renewal Risk"]} />
-          <Button variant="ghost" size="sm" className="h-7 text-[10px] text-muted-foreground" onClick={clearFilters}>Clear filters</Button>
-          <span className="ml-auto font-mono text-[9px] text-muted-foreground">{filtered.length} records</span>
+          <Button variant="ghost" size="sm" className="h-7 text-[11px] text-muted-foreground" onClick={clearFilters}>Clear filters</Button>
+          <span className="ml-auto font-mono text-[10px] text-muted-foreground">{filtered.length} records</span>
         </div>
 
-        {selected.length > 0 && <div className="flex items-center gap-3 border-b border-primary/20 bg-primary/5 px-3 py-2"><span className="text-[11px] font-medium">{selected.length} selected</span><Button variant="outline" size="sm" className="h-7 bg-card text-[10px]" onClick={() => toast.success("Owner updated for selected customers")}>Assign owner</Button><Button variant="outline" size="sm" className="h-7 bg-card text-[10px]" onClick={() => toast.success("Tags applied")}>Add tag</Button><Button variant="ghost" size="sm" className="ml-auto h-7 text-[10px]" onClick={() => setSelected([])}>Clear</Button></div>}
+        {selected.length > 0 && <div className="flex items-center gap-3 border-b border-primary/20 bg-primary/5 px-3 py-2"><span className="text-[12px] font-medium">{selected.length} selected</span><Button variant="outline" size="sm" className="h-7 bg-card text-[11px]" onClick={() => toast.success("Owner updated for selected customers")}>Assign owner</Button><Button variant="outline" size="sm" className="h-7 bg-card text-[11px]" onClick={() => toast.success("Tags applied")}>Add tag</Button><Button variant="ghost" size="sm" className="ml-auto h-7 text-[11px]" onClick={() => setSelected([])}>Clear</Button></div>}
 
         <div className="overflow-x-auto">
           <table className="data-table min-w-[1240px]">
@@ -95,8 +95,8 @@ export default function Customers() {
         </div>
 
         <div className="flex flex-col gap-3 border-t border-border/70 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="text-[10px] text-muted-foreground">Showing {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, filtered.length)} of {filtered.length} customers</div>
-          <div className="flex items-center gap-1"><Button variant="outline" size="icon" className="size-7 bg-card" disabled={page === 1} onClick={() => setPage((value) => Math.max(1, value - 1))}><ChevronLeft className="size-3.5" /></Button>{Array.from({ length: pages }, (_, index) => index + 1).map((item) => <Button key={item} variant={item === page ? "default" : "ghost"} size="icon" className="size-7 text-[10px]" onClick={() => setPage(item)}>{item}</Button>)}<Button variant="outline" size="icon" className="size-7 bg-card" disabled={page === pages} onClick={() => setPage((value) => Math.min(pages, value + 1))}><ChevronRight className="size-3.5" /></Button></div>
+          <div className="text-[11px] text-muted-foreground">Showing {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, filtered.length)} of {filtered.length} customers</div>
+          <div className="flex items-center gap-1"><Button variant="outline" size="icon" className="size-7 bg-card" disabled={page === 1} onClick={() => setPage((value) => Math.max(1, value - 1))}><ChevronLeft className="size-3.5" /></Button>{Array.from({ length: pages }, (_, index) => index + 1).map((item) => <Button key={item} variant={item === page ? "default" : "ghost"} size="icon" className="size-7 text-[11px]" onClick={() => setPage(item)}>{item}</Button>)}<Button variant="outline" size="icon" className="size-7 bg-card" disabled={page === pages} onClick={() => setPage((value) => Math.min(pages, value + 1))}><ChevronRight className="size-3.5" /></Button></div>
         </div>
       </div>
     </AppShell>
@@ -104,7 +104,7 @@ export default function Customers() {
 }
 
 function FilterSelect({ value, onChange, items }: { value: string; onChange: (value: string) => void; items: string[] }) {
-  return <Select value={value} onValueChange={onChange}><SelectTrigger className="h-7 w-auto min-w-[112px] border-dashed bg-card px-2 text-[10px]"><SelectValue /></SelectTrigger><SelectContent>{items.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select>;
+  return <Select value={value} onValueChange={onChange}><SelectTrigger className="h-7 w-auto min-w-[112px] border-dashed bg-card px-2 text-[11px]"><SelectValue /></SelectTrigger><SelectContent>{items.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select>;
 }
 
 function SortableHead({ label, field, current, direction, onSort, align }: { label: string; field: SortKey; current: SortKey; direction: "asc" | "desc"; onSort: (key: SortKey) => void; align?: "right" }) {
@@ -114,17 +114,17 @@ function SortableHead({ label, field, current, direction, onSort, align }: { lab
 function CustomerRow({ customer, isVisible, selected, toggleSelected }: { customer: Customer; isVisible: (column: Column) => boolean; selected: boolean; toggleSelected: () => void }) {
   return <tr className={cn(selected && "bg-primary/[0.04]")}>
     <td><Checkbox checked={selected} onCheckedChange={toggleSelected} aria-label={`Select ${customer.company}`} /></td>
-    {isVisible("ID") && <td className="font-mono text-[10px] text-muted-foreground">{customer.id}</td>}
-    {isVisible("Customer") && <td><Link href={`/customers/${customer.id}`} className="flex items-center gap-2.5 group"><Avatar initials={customer.initials} /><div><div className="font-medium group-hover:underline">{customer.company}</div><div className="text-[9px] text-muted-foreground">{customer.industry} · {customer.region}</div></div></Link></td>}
-    {isVisible("Contact") && <td><div>{customer.contact.name}</div><div className="text-[9px] text-muted-foreground">Owner: {customer.owner.name}</div></td>}
+    {isVisible("ID") && <td className="font-mono text-[11px] text-muted-foreground">{customer.id}</td>}
+    {isVisible("Customer") && <td><Link href={`/customers/${customer.id}`} className="flex items-center gap-2.5 group"><Avatar initials={customer.initials} /><div><div className="font-medium group-hover:underline">{customer.company}</div><div className="text-[10px] text-muted-foreground">{customer.industry} · {customer.region}</div></div></Link></td>}
+    {isVisible("Contact") && <td><div>{customer.contact.name}</div><div className="text-[10px] text-muted-foreground">Owner: {customer.owner.name}</div></td>}
     {isVisible("Activated") && <td>{customer.activatedAt}</td>}
     {isVisible("Subscription") && <td><StatusBadge status={customer.status} /></td>}
-    {isVisible("Plan") && <td><span className="rounded-md border bg-muted/30 px-2 py-1 text-[10px] font-medium">{customer.plan}</span></td>}
+    {isVisible("Plan") && <td><span className="rounded-md border bg-muted/30 px-2 py-1 text-[11px] font-medium">{customer.plan}</span></td>}
     {isVisible("Renewal") && <td>{customer.renewal}</td>}
     {isVisible("MRR") && <td className="text-right font-tabular font-medium">{formatCurrency(customer.subscription.mrr)}</td>}
     {isVisible("Usage") && <td className="text-right font-tabular">{formatNumber(customer.usage.messages)}</td>}
     {isVisible("Last activity") && <td>{customer.lastActivity}</td>}
-    {isVisible("Health") && <td><div className="flex items-center gap-2"><span className={cn("grid size-7 place-items-center rounded-full border font-tabular text-[10px] font-semibold", customer.health.score >= 75 ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300" : customer.health.score >= 60 ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300" : "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300")}>{customer.health.score}</span><span className="text-[10px]">{customer.health.status}</span></div></td>}
+    {isVisible("Health") && <td><div className="flex items-center gap-2"><span className={cn("grid size-7 place-items-center rounded-full border font-tabular text-[11px] font-semibold", customer.health.score >= 75 ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300" : customer.health.score >= 60 ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300" : "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300")}>{customer.health.score}</span><span className="text-[11px]">{customer.health.status}</span></div></td>}
     <td><DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="size-7"><MoreHorizontal className="size-4" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem asChild><Link href={`/customers/${customer.id}`}>View customer</Link></DropdownMenuItem><DropdownMenuItem onClick={() => toast.success("Customer edit opened")}>Edit customer</DropdownMenuItem><DropdownMenuItem onClick={() => toast.success("Note added to customer")}>Add note</DropdownMenuItem><DropdownMenuSeparator /><DropdownMenuItem className="text-rose-600" onClick={() => toast.success("Customer access suspended")}>Suspend access</DropdownMenuItem></DropdownMenuContent></DropdownMenu></td>
   </tr>;
 }
