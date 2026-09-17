@@ -203,9 +203,52 @@ function vitePluginStorageProxy(): Plugin {
   };
 }
 
-const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector(), vitePluginStorageProxy()];
+function vitePluginUserSession(): Plugin {
+  return {
+    name: "user-session-api",
+    configureServer(server: ViteDevServer) {
+      server.middlewares.use("/api/set-user-session", (req, res) => {
+        if (req.method !== "POST") {
+          res.writeHead(405, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Method Not Allowed" }));
+          return;
+        }
+
+        let body = "";
+        req.on("data", (chunk) => {
+          body += chunk.toString();
+        });
+
+        req.on("end", () => {
+          try {
+            const { userId } = JSON.parse(body || "{}");
+            if (userId) {
+              res.setHeader(
+                "Set-Cookie",
+                `sb_user_session=${userId}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`
+              );
+            } else {
+              res.setHeader(
+                "Set-Cookie",
+                `sb_user_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`
+              );
+            }
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ success: true, userId: userId || null }));
+          } catch (e) {
+            res.writeHead(400, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ success: false, error: String(e) }));
+          }
+        });
+      });
+    },
+  };
+}
+
+const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector(), vitePluginStorageProxy(), vitePluginUserSession()];
 
 export default defineConfig({
+  envPrefix: ["VITE_", "NEXT_PUBLIC_"],
   plugins,
   resolve: {
     alias: {

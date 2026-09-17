@@ -1,4 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { getCurrentUser } from "aws-amplify/auth";
+import { fetchCustomerAnalytics } from "@/lib/api/customerAnalytics";
 import { Link } from "wouter";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Legend, Line, Pie, PieChart, ResponsiveContainer, Tooltip as RechartsTooltip, XAxis, YAxis } from "recharts";
 import { Activity, BarChart3, ChevronRight, CircleDollarSign, MessageCircleMore, MoreHorizontal, RefreshCw, UsersRound } from "lucide-react";
@@ -18,6 +20,33 @@ type ChartState = "data" | "empty" | "error";
 
 export default function AnalyticsStudio() {
   const { isRefreshing, refreshData } = useApp();
+
+  // ============================================================================
+  // TEMPORARY READ-ONLY TEST: Customer Analytics API
+  // (Reuses shared customer analytics fetcher to prevent duplicate network calls)
+  // ============================================================================
+  useEffect(() => {
+    async function testCustomerAnalytics() {
+      console.log("🚀 [CustomerAnalytics Test] Starting API test...");
+      try {
+        const cognitoUser = await getCurrentUser().catch(() => null);
+        const userId = cognitoUser?.userId || null;
+        console.log("👤 [CustomerAnalytics Test] Current Cognito User ID:", userId);
+
+        const data = await fetchCustomerAnalytics(isRefreshing);
+        console.log("📡 [CustomerAnalytics Test] Request URL: https://api.superblock.chat/customeranalytics (Method: GET)");
+        console.log(`✅ [CustomerAnalytics Test] Success response received (count: ${data?.count ?? data?.users?.length ?? 0}):`, data);
+      } catch (err) {
+        console.error("💥 [CustomerAnalytics Test] Fetch failed:", err);
+      }
+    }
+
+    testCustomerAnalytics();
+
+    if (typeof window !== "undefined") {
+      (window as unknown as { testCustomerAnalytics: typeof testCustomerAnalytics }).testCustomerAnalytics = testCustomerAnalytics;
+    }
+  }, [isRefreshing]);
   const [dateRange, setDateRange] = useState("Last 30 days");
   const [activityMetrics, setActivityMetrics] = useState(["DAU", "WAU", "MAU"]);
   const [chartState, setChartState] = useState<ChartState>("data");

@@ -10,6 +10,35 @@ async function startServer() {
   const app = express();
   const server = createServer(app);
 
+  // Parse JSON payloads
+  app.use(express.json());
+
+  // Session cookie management endpoint
+  app.post("/api/set-user-session", (req, res) => {
+    try {
+      const { userId } = req.body || {};
+
+      if (userId) {
+        res.cookie("sb_user_session", userId, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "lax",
+          path: "/",
+          maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+        });
+        return res.json({ success: true, userId });
+      } else {
+        res.clearCookie("sb_user_session", { path: "/" });
+        return res.json({ success: true, userId: null });
+      }
+    } catch (error) {
+      console.error("Error setting user session:", error);
+      return res
+        .status(500)
+        .json({ success: false, error: "Internal server error" });
+    }
+  });
+
   // Serve static files from dist/public in production
   const staticPath =
     process.env.NODE_ENV === "production"

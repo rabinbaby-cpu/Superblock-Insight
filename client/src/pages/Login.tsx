@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import {
   ArrowRight,
@@ -6,7 +6,6 @@ import {
   CheckCircle2,
   Eye,
   EyeOff,
-  KeyRound,
   Loader2,
   LockKeyhole,
   MessageCircleMore,
@@ -20,39 +19,307 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import {
+  signIn,
+  signOut,
+  getCurrentUser,
+  fetchUserAttributes,
+  fetchAuthSession,
+} from "aws-amplify/auth";
+import { initAmplify } from "@/lib/amplify";
+import { useAuth } from "@/contexts/AuthContext";
+
+// Ensure Amplify is initialized
+initAmplify();
 
 const previewBars = [44, 58, 51, 68, 63, 78, 88, 84, 96];
 const trustItems = ["Customer health", "Usage analytics", "Revenue operations"];
 
 export default function Login() {
   const [, navigate] = useLocation();
-  const [email, setEmail] = useState("anika@superblock.chat");
-  const [password, setPassword] = useState("superblock-demo");
+  const { refreshAuth } = useAuth();
+  const [username, setUsername] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("sb-auth-email") || "";
+    }
+    return "";
+  });
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const signIn = () => {
-    setLoading(true);
-    window.setTimeout(() => {
-      setLoading(false);
-      toast.success("Welcome back, Anika");
-      navigate("/analytics");
-    }, 900);
-  };
+  useEffect(() => {
+    initAmplify();
 
-  const submit = (event: React.FormEvent) => {
+    const checkExistingSession = async () => {
+      try {
+        const currentUser = await getCurrentUser();
+        if (currentUser && currentUser.userId) {
+          await refreshAuth();
+          navigate("/analytics", { replace: true });
+        }
+      } catch {
+        // User not logged in, proceed to show login form
+      }
+    };
+
+    checkExistingSession();
+  }, [navigate, refreshAuth]);
+
+  const submit = async (event: React.FormEvent) => {
     event.preventDefault();
+    const trimmedUsername = username.trim();
+
+    if (!trimmedUsername) {
+      setError("Please enter your username or work email.");
+      return;
+    }
+
+    if (!password) {
+      setError("Please enter your password.");
+      return;
+    }
+
+    setLoading(true);
     setError("");
-    if (!email.includes("@")) {
-      setError("Enter a valid work email address.");
-      return;
+
+    try {
+      console.log("🔵 Attempting Cognito sign in for:", trimmedUsername);
+      let user;
+      try {
+        user = await signIn({
+          username: trimmedUsername,
+          password,
+        });
+      } catch (signInErr: unknown) {
+        const isAlreadyAuth =
+          (signInErr &&
+            typeof signInErr === "object" &&
+            "name" in signInErr &&
+            (signInErr as { name?: string }).name ===
+              "UserAlreadyAuthenticatedException") ||
+          (signInErr instanceof Error &&
+            signInErr.message.includes("already a signed in user"));
+
+        if (isAlreadyAuth) {
+          console.log("User already authenticated, refreshing session...");
+          try {
+            await signOut();
+            user = await signIn({
+              username: trimmedUsername,
+              password,
+            });
+          } catch {
+            // Already signed in, proceed to retrieve user data
+          }
+        } else {
+          throw signInErr;
+        }
+      }
+
+      console.log("✅ Cognito User Logged in successfully:", user);
+
+      const cognitoUser = await getCurrentUser();
+      const attributes = await fetchUserAttributes().catch(
+        () => ({} as Record<string, string>)
+      );
+      const session = await fetchAuthSession();
+      const token =
+        session.tokens?.idToken?.toString() ||
+        session.tokens?.accessToken?.toString();
+      const userId = cognitoUser.userId;
+
+      console.log("🔑 Session Token Retrieved:", { userId, hasToken: !!token });
+
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+
+      const apiUrl = `https://api.superblock.chat/login?userId=${userId}`;
+      console.log("🌐 Fetching user metadata from:", apiUrl);
+
+      let userNamedata: Record<string, any> = {};
+      try {
+        const res = await fetch(apiUrl, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ userId }),
+        });
+        if (res.ok) {
+          userNamedata = await res.json().catch(() => ({}));
+          console.log("📦 Backend Response:", userNamedata);
+        } else {
+          console.warn("Backend metadata request returned status:", res.status);
+        }
+      } catch (fetchErr) {
+        console.warn("Could not reach backend metadata endpoint:", fetchErr);
+      }
+
+      const resolvedUsername =
+        userNamedata.user_name ||
+        userNamedata.clientId ||
+        userNamedata.client_id ||
+        trimmedUsername ||
+        cognitoUser?.username ||
+        "";
+
+      localStorage.setItem("sb-auth-email", attributes.email ?? trimmedUsername);
+      localStorage.setItem("clientUserId", userId);
+      localStorage.setItem("userId", userId);
+      localStorage.setItem("sub", userId);
+      if (userNamedata.clientId || userNamedata.client_id) {
+        localStorage.setItem(
+          "clientId",
+          userNamedata.clientId || userNamedata.client_id
+        );
+      } else if (resolvedUsername) {
+        localStorage.setItem("clientId", resolvedUsername);
+      }
+      if (resolvedUsername) {
+        localStorage.setItem("client", resolvedUsername);
+        localStorage.setItem("user_name", resolvedUsername);
+        localStorage.setItem("username", resolvedUsername);
+      }
+      if (cognitoUser?.username) {
+        localStorage.setItem("cognito_username", cognitoUser.username);
+      }
+      if (userNamedata.profile_picture || userNamedata.avatar) {
+        localStorage.setItem(
+          "profile_picture",
+          userNamedata.profile_picture || userNamedata.avatar || ""
+        );
+      }
+      localStorage.setItem(
+        "whatsapp_endpoint",
+        userNamedata.whatsapp_endpoint || ""
+      );
+      localStorage.setItem(
+        "instagram_endpoint",
+        userNamedata.instagram_endpoint || ""
+      );
+      localStorage.setItem(
+        "facebook_endpoint",
+        userNamedata.facebook_endpoint || ""
+      );
+      localStorage.setItem("business_name", userNamedata.business_name || "");
+      localStorage.setItem(
+        "graph_api_token",
+        userNamedata.graph_api_token || ""
+      );
+      localStorage.setItem(
+        "business_phone_number_id",
+        userNamedata.business_phone_number_id || ""
+      );
+      localStorage.setItem(
+        "instagrambusinessId",
+        userNamedata.instagrambusinessId || ""
+      );
+      localStorage.setItem(
+        "instagram_access_token",
+        userNamedata.instagram_access_token || ""
+      );
+      localStorage.setItem(
+        "facebook_page_id",
+        userNamedata.facebook_page_id || ""
+      );
+      localStorage.setItem(
+        "facebook_access_token",
+        userNamedata.facebook_access_token || ""
+      );
+      localStorage.setItem(
+        "shopify_admin_access_token",
+        userNamedata.shopify_admin_access_token || ""
+      );
+      localStorage.setItem("shopify_api_url", userNamedata.shopify_api_url || "");
+      localStorage.setItem(
+        "business_account_id",
+        userNamedata.business_account_id || ""
+      );
+      localStorage.setItem(
+        "business_portfolio_id",
+        userNamedata.business_portfolio_id || ""
+      );
+
+      if (attributes.phone_number) {
+        localStorage.setItem("phone_number", attributes.phone_number);
+        localStorage.setItem("signup_phone", attributes.phone_number);
+      }
+      const rawUserPhone =
+        userNamedata.phone ||
+        userNamedata.business_phone ||
+        userNamedata.company_phone ||
+        userNamedata.phone_number;
+      if (rawUserPhone) {
+        localStorage.setItem("phone_number", rawUserPhone);
+        localStorage.setItem("business_phone", rawUserPhone);
+      }
+
+      // Initialize session cookie
+      await fetch("/api/set-user-session", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userId,
+        }),
+      }).catch((e) => {
+        console.warn("Session endpoint warning:", e);
+      });
+
+      // Update AuthContext state
+      await refreshAuth();
+
+      toast.success(`Welcome back, ${resolvedUsername || "User"}`);
+      navigate("/analytics");
+    } catch (err: unknown) {
+      console.error("❌ Sign in error:", err);
+      const isUserNotFound =
+        (err &&
+          typeof err === "object" &&
+          "name" in err &&
+          (err as { name?: string }).name === "UserNotFoundException") ||
+        (err instanceof Error &&
+          (err.message.includes("User does not exist") ||
+            err.message.includes("UserNotFoundException")));
+
+      const isNotAuthorized =
+        (err &&
+          typeof err === "object" &&
+          "name" in err &&
+          (err as { name?: string }).name === "NotAuthorizedException") ||
+        (err instanceof Error &&
+          err.message.includes("Incorrect username or password"));
+
+      const isUserNotConfirmed =
+        (err &&
+          typeof err === "object" &&
+          "name" in err &&
+          (err as { name?: string }).name === "UserNotConfirmedException") ||
+        (err instanceof Error && err.message.includes("User is not confirmed"));
+
+      if (isUserNotFound) {
+        setError("User not found. Please check your username or work email.");
+      } else if (isNotAuthorized) {
+        setError("Incorrect username or password. Please try again.");
+      } else if (isUserNotConfirmed) {
+        setError(
+          "Your account is not verified yet. Please check your email for the verification code."
+        );
+      } else {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "An error occurred during login. Please try again."
+        );
+      }
+    } finally {
+      setLoading(false);
     }
-    if (password.length < 6) {
-      setError("Password must contain at least 6 characters.");
-      return;
-    }
-    signIn();
   };
 
   return (
@@ -124,37 +391,17 @@ export default function Login() {
             <p className="mt-2 text-[14px] leading-6 text-muted-foreground">Access analytics, customer operations, and billing insights.</p>
           </div>
 
-          <Button
-            type="button"
-            variant="outline"
-            className="h-11 w-full justify-center gap-3 bg-card text-[13px]"
-            onClick={() => {
-              toast.success("Workspace SSO simulated");
-              signIn();
-            }}
-            disabled={loading}
-          >
-            <ShieldCheck className="size-4 text-emerald-600" />
-            Continue with workspace SSO
-          </Button>
-
-          <div className="my-6 flex items-center gap-3 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-            <span className="h-px flex-1 bg-border" />
-            or use work email
-            <span className="h-px flex-1 bg-border" />
-          </div>
-
           <form onSubmit={submit} className="space-y-4" noValidate>
             <div>
-              <Label htmlFor="email" className="text-[12px] font-medium">Work email</Label>
+              <Label htmlFor="username" className="text-[12px] font-medium">Username or work email</Label>
               <Input
-                id="email"
+                id="username"
                 className="mt-2 h-11 bg-card px-3.5 text-[14px]"
-                type="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                placeholder="you@company.com"
-                autoComplete="email"
+                type="text"
+                value={username}
+                onChange={(event) => setUsername(event.target.value)}
+                placeholder="Enter your username or email..."
+                autoComplete="username"
                 aria-invalid={!!error}
               />
             </div>
@@ -165,7 +412,13 @@ export default function Login() {
                 <button
                   type="button"
                   className="text-[11px] font-medium text-muted-foreground hover:text-foreground"
-                  onClick={() => toast.info("Password reset link sent", { description: "Mock interaction only." })}
+                  onClick={() => {
+                    if (!username.trim()) {
+                      toast.info("Please enter your username first.");
+                      return;
+                    }
+                    toast.info(`Password reset requested for: ${username.trim()}`);
+                  }}
                 >
                   Forgot password?
                 </button>
@@ -177,13 +430,14 @@ export default function Login() {
                   type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
+                  placeholder="Enter your password..."
                   autoComplete="current-password"
                   aria-invalid={!!error}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword((visible) => !visible)}
-                  className="absolute right-0 top-0 grid size-11 place-items-center text-muted-foreground hover:text-foreground"
+                  className="absolute right-0 top-0 grid size-11 place-items-center text-muted-foreground hover:text-foreground cursor-pointer"
                   aria-label={showPassword ? "Hide password" : "Show password"}
                 >
                   {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
@@ -202,7 +456,7 @@ export default function Login() {
               <Label htmlFor="remember" className="text-[12px] font-normal text-muted-foreground">Keep me signed in on this device</Label>
             </div>
 
-            <Button className="h-11 w-full text-[13px]" disabled={loading}>
+            <Button className="h-11 w-full text-[13px] cursor-pointer" disabled={loading}>
               {loading ? <Loader2 className="size-4 animate-spin" /> : <LockKeyhole className="size-4" />}
               {loading ? "Signing in…" : "Sign in securely"}
               {!loading && <ArrowRight className="ml-auto size-4" />}
@@ -211,10 +465,10 @@ export default function Login() {
 
           <div className="mt-7 rounded-xl border bg-muted/30 p-3.5">
             <div className="flex items-start gap-3">
-              <span className="grid size-8 shrink-0 place-items-center rounded-lg border bg-background text-emerald-600"><KeyRound className="size-3.5" /></span>
+              <span className="grid size-8 shrink-0 place-items-center rounded-lg border bg-background text-emerald-600"><ShieldCheck className="size-4" /></span>
               <div>
-                <div className="text-[12px] font-medium">Demo workspace access</div>
-                <p className="mt-1 text-[11px] leading-5 text-muted-foreground">Any valid email and a password with six or more characters will open the dashboard.</p>
+                <div className="text-[12px] font-medium">Enterprise Cognito Authentication</div>
+                <p className="mt-1 text-[11px] leading-5 text-muted-foreground">Sign in with your Superblock Amazon Cognito account credentials to access your organization workspace.</p>
               </div>
             </div>
           </div>
