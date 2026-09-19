@@ -83,7 +83,7 @@ export type Customer = {
   plan: string;
   subscription: { status: string; startDate: string; renewalDate: string; billingCycle: string; mrr: number; contractValue: number; paymentStatus: string };
   renewal: string;
-  usage: { messages: number; broadcasts: number; conversations: number; email: number; sms: number; whatsapp: number; api: number; automations: number; storage: number };
+  usage: { messages: number; broadcasts: number; conversations: number; email: number; sms: number; whatsapp: number; api: number; automations: number; storage: number; contacts?: number };
   offerings: Offering[];
   notes: Note[];
   meetings: Meeting[];

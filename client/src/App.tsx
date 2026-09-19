@@ -6,6 +6,7 @@ import NotFound from "@/pages/NotFound";
 import AnalyticsStudio from "@/pages/AnalyticsStudio";
 import Customers from "@/pages/Customers";
 import CustomerDetail from "@/pages/CustomerDetail";
+import Users from "@/pages/Users";
 import Usage from "@/pages/Usage";
 import { Invoices, ProductsPlans, Subscriptions, Team } from "@/pages/Management";
 import Settings from "@/pages/Settings";
@@ -22,6 +23,7 @@ function Router() {
       <Route path="/analytics" component={() => <ProtectedRoute component={AnalyticsStudio} />} />
       <Route path="/customers" component={() => <ProtectedRoute component={Customers} />} />
       <Route path="/customers/:id" component={() => <ProtectedRoute component={CustomerDetail} />} />
+      <Route path="/users" component={() => <ProtectedRoute component={Users} />} />
       <Route path="/usage" component={() => <ProtectedRoute component={Usage} />} />
       <Route path="/subscriptions" component={() => <ProtectedRoute component={Subscriptions} />} />
       <Route path="/products" component={() => <ProtectedRoute component={ProductsPlans} />} />

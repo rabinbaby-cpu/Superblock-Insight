@@ -5,8 +5,6 @@ import {
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
-  ChevronLeft,
-  ChevronRight,
   Columns3,
   Download,
   Filter,
@@ -48,7 +46,6 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 const columns = [
-  "ID",
   "Customer",
   "Contact",
   "Activated",
@@ -72,12 +69,21 @@ export default function Customers() {
   const [sortKey, setSortKey] = useState<SortKey>("company");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [visible, setVisible] = useState<Column[]>([...columns]);
-  const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<string[]>([]);
-  const pageSize = 7;
+
+  // Filter for properly provisioned customer records that have required business identifiers
+  const provisionedCustomers = useMemo(() => {
+    return customers.filter(
+      (customer) =>
+        customer.region &&
+        customer.region !== "—" &&
+        customer.industry &&
+        customer.industry !== "—"
+    );
+  }, [customers]);
 
   const filtered = useMemo(() => {
-    const rows = customers.filter((customer) => {
+    const rows = provisionedCustomers.filter((customer) => {
       const matchesQuery = `${customer.company} ${customer.id} ${customer.contact.name} ${customer.contact.email} ${customer.contact.phone}`
         .toLowerCase()
         .includes(query.toLowerCase());
@@ -94,7 +100,7 @@ export default function Customers() {
         activatedAt: [a.activatedAt, b.activatedAt],
         renewal: [a.renewal, b.renewal],
         mrr: [a.subscription.mrr, b.subscription.mrr],
-        usage: [a.usage.messages, b.usage.messages],
+        usage: [a.usage.contacts || a.usage.messages, b.usage.contacts || b.usage.messages],
         health: [a.health.score, b.health.score],
       };
       const [left, right] = values[sortKey];
@@ -104,17 +110,14 @@ export default function Customers() {
           : String(left).localeCompare(String(right));
       return sortDirection === "asc" ? result : -result;
     });
-  }, [customers, query, status, plan, health, sortKey, sortDirection]);
+  }, [provisionedCustomers, query, status, plan, health, sortKey, sortDirection]);
 
-  const paginated = filtered.slice((page - 1) * pageSize, page * pageSize);
-  const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const isVisible = (column: Column) => visible.includes(column);
   const clearFilters = () => {
     setQuery("");
     setStatus("All statuses");
     setPlan("All plans");
     setHealth("All health");
-    setPage(1);
   };
   const sort = (key: SortKey) => {
     if (sortKey === key) setSortDirection((value) => (value === "asc" ? "desc" : "asc"));
@@ -142,8 +145,8 @@ export default function Customers() {
     );
     toast.success("Customer list exported");
   };
-  const allPageSelected =
-    paginated.length > 0 && paginated.every((customer) => selected.includes(customer.id));
+  const allSelected =
+    filtered.length > 0 && filtered.every((customer) => selected.includes(customer.id));
 
   return (
     <AppShell breadcrumbs={["Customers"]}>
@@ -171,7 +174,6 @@ export default function Customers() {
           value={query}
           onChange={(value) => {
             setQuery(value);
-            setPage(1);
           }}
           placeholder="Search company, ID, contact, or email…"
           actions={
@@ -246,7 +248,6 @@ export default function Customers() {
             value={status}
             onChange={(value) => {
               setStatus(value);
-              setPage(1);
             }}
             items={["All statuses", "Active", "Paid", "Trial", "Renewal Due", "Suspended", "Expired"]}
           />
@@ -254,7 +255,6 @@ export default function Customers() {
             value={plan}
             onChange={(value) => {
               setPlan(value);
-              setPage(1);
             }}
             items={["All plans", "Starter", "Growth", "Advanced", "Custom"]}
           />
@@ -262,7 +262,6 @@ export default function Customers() {
             value={health}
             onChange={(value) => {
               setHealth(value);
-              setPage(1);
             }}
             items={["All health", "Healthy", "At Risk", "Expansion", "Renewal Risk"]}
           />
@@ -309,24 +308,23 @@ export default function Customers() {
           </div>
         )}
 
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto max-h-[calc(100vh-270px)] min-h-[420px] overflow-y-auto subtle-scrollbar">
           <table className="data-table min-w-[1240px]">
-            <thead>
+            <thead className="sticky top-0 z-10 bg-card/95 backdrop-blur-xs">
               <tr>
                 <th className="w-10">
                   <Checkbox
-                    checked={allPageSelected}
+                    checked={allSelected}
                     onCheckedChange={(checked) =>
                       setSelected(
                         checked
-                          ? Array.from(new Set([...selected, ...paginated.map((c) => c.id)]))
-                          : selected.filter((id) => !paginated.some((c) => c.id === id))
+                          ? Array.from(new Set([...selected, ...filtered.map((c) => c.id)]))
+                          : []
                       )
                     }
-                    aria-label="Select all customers on page"
+                    aria-label="Select all customers"
                   />
                 </th>
-                {isVisible("ID") && <th>ID</th>}
                 {isVisible("Customer") && (
                   <SortableHead
                     label="Customer"
@@ -417,14 +415,14 @@ export default function Customers() {
                     </div>
                   </td>
                 </tr>
-              ) : paginated.length === 0 ? (
+              ) : filtered.length === 0 ? (
                 <tr>
                   <td colSpan={visible.length + 2} className="py-12 text-center text-xs text-muted-foreground">
                     No customer records found.
                   </td>
                 </tr>
               ) : (
-                paginated.map((customer) => (
+                filtered.map((customer) => (
                   <CustomerRow
                     key={customer.id}
                     customer={customer}
@@ -448,39 +446,11 @@ export default function Customers() {
           <div className="text-[11px] text-muted-foreground">
             {filtered.length === 0
               ? "0 customers"
-              : `Showing ${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, filtered.length)} of ${filtered.length} customers`}
+              : `Showing all ${filtered.length} customers (scroll to browse)`}
           </div>
-          <div className="flex items-center gap-1">
-            <Button
-              variant="outline"
-              size="icon"
-              className="size-7 bg-card"
-              disabled={page === 1}
-              onClick={() => setPage((value) => Math.max(1, value - 1))}
-            >
-              <ChevronLeft className="size-3.5" />
-            </Button>
-            {Array.from({ length: pages }, (_, index) => index + 1).map((item) => (
-              <Button
-                key={item}
-                variant={item === page ? "default" : "ghost"}
-                size="icon"
-                className="size-7 text-[11px]"
-                onClick={() => setPage(item)}
-              >
-                {item}
-              </Button>
-            ))}
-            <Button
-              variant="outline"
-              size="icon"
-              className="size-7 bg-card"
-              disabled={page === pages}
-              onClick={() => setPage((value) => Math.min(pages, value + 1))}
-            >
-              <ChevronRight className="size-3.5" />
-            </Button>
-          </div>
+          <span className="font-mono text-[10px] text-muted-foreground">
+            {filtered.length} of {provisionedCustomers.length} total
+          </span>
         </div>
       </div>
     </AppShell>
@@ -569,9 +539,6 @@ function CustomerRow({
           aria-label={`Select ${customer.company}`}
         />
       </td>
-      {isVisible("ID") && (
-        <td className="font-mono text-[11px] text-muted-foreground">{customer.id}</td>
-      )}
       {isVisible("Customer") && (
         <td>
           <Link href={`/customers/${customer.id}`} className="flex items-center gap-2.5 group">
@@ -630,7 +597,11 @@ function CustomerRow({
       )}
       {isVisible("Usage") && (
         <td className="text-right font-tabular">
-          {customer.usage.messages > 0 ? (
+          {customer.usage.contacts && customer.usage.contacts > 0 ? (
+            <span title={`${customer.usage.contacts} CRM contacts`}>
+              {formatNumber(customer.usage.contacts)} contacts
+            </span>
+          ) : customer.usage.messages > 0 ? (
             formatNumber(customer.usage.messages)
           ) : (
             <span className="text-muted-foreground">—</span>

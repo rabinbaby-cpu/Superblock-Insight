@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { getCurrentUser, fetchAuthSession } from "aws-amplify/auth";
-import type { Customer } from "@/data/mockData";
+import type { Customer, CustomerStatus } from "@/data/mockData";
+import { getCustomerContactCount } from "@/data/customerContactsData";
 
 export interface ApiCustomerRecord {
   user_id: string;
@@ -54,7 +55,7 @@ function getInitials(name?: string | null): string {
 
 /**
  * Maps an API user record to the application's Customer shape.
- * Only real fields provided by the API are populated.
+ * Only real fields provided by the API and Analytics Studio are populated.
  * Unavailable fields are mapped strictly to "—" or 0 without inventing fake data.
  */
 export function mapApiUserToCustomer(user: ApiCustomerRecord): Customer {
@@ -62,6 +63,17 @@ export function mapApiUserToCustomer(user: ApiCustomerRecord): Customer {
   const contactEmail = user.user_email?.trim() || user.email?.trim() || "—";
   const contactName = user.user_name?.trim() || "—";
   const contactPhone = user.business_phone_number_id?.trim() || "—";
+
+  const isProvisioned = Boolean(
+    user.business_account_id &&
+    user.business_account_id !== "—" &&
+    user.business_portfolio_id &&
+    user.business_portfolio_id !== "—"
+  );
+
+  const contactCount =
+    getCustomerContactCount(user.user_id) ||
+    (user.user_name ? getCustomerContactCount(user.user_name) : 0);
 
   return {
     id: user.user_id,
@@ -75,16 +87,16 @@ export function mapApiUserToCustomer(user: ApiCustomerRecord): Customer {
       phone: contactPhone,
     },
     activatedAt: formatActivatedDate(user.created_at),
-    status: "—" as any,
+    status: (isProvisioned ? "Active" : "Trial") as CustomerStatus,
     plan: "—",
     subscription: {
-      status: "—",
+      status: isProvisioned ? "Active" : "—",
       startDate: formatActivatedDate(user.created_at),
       renewalDate: "—",
       billingCycle: "—",
       mrr: 0,
       contractValue: 0,
-      paymentStatus: "—",
+      paymentStatus: isProvisioned ? "Current" : "—",
     },
     renewal: "—",
     usage: {
@@ -97,6 +109,7 @@ export function mapApiUserToCustomer(user: ApiCustomerRecord): Customer {
       api: 0,
       automations: 0,
       storage: 0,
+      contacts: contactCount,
     },
     offerings: [],
     notes: [],

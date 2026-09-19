@@ -16,6 +16,7 @@ import {
   Search,
   Settings,
   Sun,
+  UserCheck,
   Users,
   UsersRound,
   Zap,
@@ -42,6 +43,7 @@ const sections = [
     items: [
       { title: "Analytics Studio", href: "/analytics", icon: BarChart3 },
       { title: "Customers", href: "/customers", icon: UsersRound },
+      { title: "Users", href: "/users", icon: UserCheck },
       { title: "Usage", href: "/usage", icon: Zap },
     ],
   },
@@ -95,7 +97,9 @@ function NavContent({
                 const active =
                   location === item.href ||
                   (item.href === "/customers" &&
-                    location.startsWith("/customers/"));
+                    location.startsWith("/customers/")) ||
+                  (item.href === "/users" &&
+                    location.startsWith("/users/"));
                 const content = (
                   <Link
                     href={item.href}

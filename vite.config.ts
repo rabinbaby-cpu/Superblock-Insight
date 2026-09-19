@@ -5,6 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { defineConfig, type Plugin, type ViteDevServer } from "vite";
 import { vitePluginManusRuntime } from "vite-plugin-manus-runtime";
+import { getCustomerActivities, getCustomerProducts } from "./server/analyticsDb";
 
 // =============================================================================
 // Manus Debug Collector - Vite Plugin
@@ -245,7 +246,61 @@ function vitePluginUserSession(): Plugin {
   };
 }
 
-const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector(), vitePluginStorageProxy(), vitePluginUserSession()];
+function vitePluginCustomerAnalytics(): Plugin {
+  return {
+    name: "customer-analytics-api",
+    configureServer(server: ViteDevServer) {
+      server.middlewares.use(async (req, res, next) => {
+        if (!req.url?.startsWith("/api/customer-activities") && !req.url?.startsWith("/api/customer-products")) {
+          return next();
+        }
+
+        const urlObj = new URL(req.url, "http://localhost:3000");
+
+        if (urlObj.pathname === "/api/customer-activities") {
+          try {
+            const customerId = urlObj.searchParams.get("customerId") || "";
+            const customerName = urlObj.searchParams.get("customerName") || "";
+            const activities = await getCustomerActivities(customerId, customerName);
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ success: true, count: activities.length, activities }));
+          } catch (err) {
+            res.writeHead(500, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ success: false, error: String(err), activities: [] }));
+          }
+          return;
+        }
+
+        if (urlObj.pathname === "/api/customer-products") {
+          try {
+            const customerId = urlObj.searchParams.get("customerId") || "";
+            const customerName = urlObj.searchParams.get("customerName") || "";
+            const products = await getCustomerProducts(customerId, customerName);
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ success: true, count: products.length, products }));
+          } catch (err) {
+            res.writeHead(500, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ success: false, error: String(err), products: [] }));
+          }
+          return;
+        }
+
+        next();
+      });
+    },
+  };
+}
+
+const plugins = [
+  react(),
+  tailwindcss(),
+  jsxLocPlugin(),
+  vitePluginManusRuntime(),
+  vitePluginManusDebugCollector(),
+  vitePluginStorageProxy(),
+  vitePluginUserSession(),
+  vitePluginCustomerAnalytics(),
+];
 
 export default defineConfig({
   envPrefix: ["VITE_", "NEXT_PUBLIC_"],
