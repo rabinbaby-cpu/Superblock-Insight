@@ -117,7 +117,7 @@ def fetch_all():
         ca.user_name AS actor_user_name,
         ca.created_at
     FROM public.customer_activities ca
-    JOIN public.customers c ON ca.customer_id = c.id
+    JOIN public.customers_details c ON ca.customer_id = c.id
     LEFT JOIN public.users u ON LOWER(c.client_user_id) = LOWER(u.user_name) 
                              OR LOWER(c.client_user_id) = LOWER(u.email)
                              OR LOWER(c.client_user_id) = LOWER(u.user_email)
@@ -169,7 +169,7 @@ def fetch_all():
         cp.active,
         cp.created_at
     FROM public.customer_products cp
-    JOIN public.customers c ON cp.customer_id = c.id
+    JOIN public.customers_details c ON cp.customer_id = c.id
     LEFT JOIN public.users u ON LOWER(c.client_user_id) = LOWER(u.user_name) 
                              OR LOWER(c.client_user_id) = LOWER(u.email)
                              OR LOWER(c.client_user_id) = LOWER(u.user_email)
@@ -228,7 +228,7 @@ def fetch_all():
         cd.last_activity_at,
         cd.created_at
     FROM public.customer_deals cd
-    JOIN public.customers c ON cd.customer_id = c.id
+    JOIN public.customers_details c ON cd.customer_id = c.id
     LEFT JOIN public.users u ON LOWER(c.client_user_id) = LOWER(u.user_name) 
                              OR LOWER(c.client_user_id) = LOWER(u.email)
                              OR LOWER(c.client_user_id) = LOWER(u.user_email)
@@ -276,7 +276,7 @@ def fetch_all():
         ct.created_by,
         ct.created_at
     FROM public.customer_tasks ct
-    JOIN public.customers c ON ct.customer_id = c.id
+    JOIN public.customers_details c ON ct.customer_id = c.id
     LEFT JOIN public.users u ON LOWER(c.client_user_id) = LOWER(u.user_name) 
                              OR LOWER(c.client_user_id) = LOWER(u.email)
                              OR LOWER(c.client_user_id) = LOWER(u.user_email)
@@ -345,7 +345,7 @@ def fetch_all():
         tk.status,
         tk.created_at
     FROM public.customer_tickets tk
-    JOIN public.customers c ON tk.customer_id = c.id
+    JOIN public.customers_details c ON tk.customer_id = c.id
     LEFT JOIN public.users u ON LOWER(c.client_user_id) = LOWER(u.user_name) 
                              OR LOWER(c.client_user_id) = LOWER(u.email)
                              OR LOWER(c.client_user_id) = LOWER(u.user_email)
@@ -387,7 +387,7 @@ def fetch_all():
         cg.total_count,
         cg.created_at
     FROM public.customer_contact_groups cg
-    JOIN public.customers c ON cg.customer_id = c.id
+    JOIN public.customers_details c ON cg.customer_id = c.id
     LEFT JOIN public.users u ON LOWER(c.client_user_id) = LOWER(u.user_name) 
                              OR LOWER(c.client_user_id) = LOWER(u.email)
                              OR LOWER(c.client_user_id) = LOWER(u.user_email)
@@ -424,7 +424,7 @@ def fetch_all():
         n.created_at,
         n.updated_at
     FROM public.notes n
-    JOIN public.customers c ON n.customer_id = c.id
+    JOIN public.customers_details c ON n.customer_id = c.id
     LEFT JOIN public.users u ON LOWER(c.client_user_id) = LOWER(u.user_name) 
                              OR LOWER(c.client_user_id) = LOWER(u.email)
                              OR LOWER(c.client_user_id) = LOWER(u.user_email)

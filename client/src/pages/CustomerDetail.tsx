@@ -568,7 +568,7 @@ export default function CustomerDetail() {
               </h1>
               <StatusBadge status={customer.status} />
             </div>
-            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[10px] text-muted-foreground">
+            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[10px] font-medium text-zinc-900 dark:text-zinc-100">
               <span>ID: {customer.id}</span>
               {customer.industry !== "—" && <span>{customer.industry}</span>}
               {customer.region !== "—" && <span>{customer.region}</span>}
@@ -577,7 +577,7 @@ export default function CustomerDetail() {
               )}
               <span>Activated {customer.activatedAt}</span>
             </div>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
+            <div className="mt-3 flex flex-wrap items-center gap-2 [&_.mini-info_span]:text-zinc-700 dark:[&_.mini-info_span]:text-zinc-300 [&_.mini-info_b]:text-zinc-950 dark:[&_.mini-info_b]:text-zinc-50">
               <span className="mini-info">
                 <span>Plan</span>
                 <b>{customer.plan}</b>
