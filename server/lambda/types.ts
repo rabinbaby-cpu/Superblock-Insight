@@ -63,6 +63,53 @@ export interface CreateNoteResponse {
 }
 
 /**
+ * Exact schema for public.meetings
+ */
+export interface MeetingRecord {
+  id: string;
+  customer_id: string;
+  title: string | null;
+  description: string | null;
+  meeting_date: string | null;
+  duration_minutes: number | null;
+  status: string | null;
+  meeting_url: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GetMeetingsResponse {
+  success: boolean;
+  count: number;
+  customerId: string;
+  meetings: MeetingRecord[];
+  error?: string;
+}
+
+export interface CreateMeetingInput {
+  customerId?: string;
+  customer_id?: string;
+  title: string;
+  description?: string | null;
+  meetingDate?: string | null;
+  meeting_date?: string | null;
+  durationMinutes?: number | null;
+  duration_minutes?: number | null;
+  status?: string | null;
+  meetingUrl?: string | null;
+  meeting_url?: string | null;
+  createdBy?: string | null;
+  created_by?: string | null;
+}
+
+export interface CreateMeetingResponse {
+  success: boolean;
+  meeting?: MeetingRecord;
+  error?: string;
+}
+
+/**
  * Exact schema for public.customers_details (formerly public.customers)
  */
 export interface CustomerDetailsRecord {

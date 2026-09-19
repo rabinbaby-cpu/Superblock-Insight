@@ -5,6 +5,8 @@ import {
   getCustomerDetailsHandler,
   listCustomerDetailsHandler,
 } from "./customerDetails/getCustomerDetails";
+import { getMeetingsHandler } from "./meetings/getMeetings";
+import { createMeetingHandler } from "./meetings/createMeeting";
 
 export * from "./types";
 export * from "./db";
@@ -14,6 +16,8 @@ export {
   getCustomerDetailsHandler,
   listCustomerDetailsHandler,
 } from "./customerDetails/getCustomerDetails";
+export { getMeetingsHandler } from "./meetings/getMeetings";
+export { createMeetingHandler } from "./meetings/createMeeting";
 
 const CORS_HEADERS = {
   "Content-Type": "application/json",
@@ -76,6 +80,16 @@ export async function handler(
       return getCustomerDetailsHandler(event);
     }
     return listCustomerDetailsHandler(event);
+  }
+
+  // 4. Meetings API: GET /meetings
+  if (method === "GET" && (rawPath.endsWith("/meetings") || rawPath.includes("/meetings/"))) {
+    return getMeetingsHandler(event);
+  }
+
+  // 5. Meetings API: POST /meetings
+  if (method === "POST" && rawPath.endsWith("/meetings")) {
+    return createMeetingHandler(event);
   }
 
   // Fallback 404

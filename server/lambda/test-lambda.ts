@@ -3,6 +3,7 @@
  * Connects to PostgreSQL on localhost:5433 (via running tunnel) to verify
  * real queries, validation, parameterization, and responses without inserting fake data.
  */
+import { execSync } from "node:child_process";
 import {
   getNotesHandler,
   createNoteHandler,
@@ -18,6 +19,24 @@ process.env.DB_PORT = "5433";
 process.env.DB_NAME = "superblockhq";
 process.env.DB_USER = "superblockhq";
 process.env.DB_SSL = "true";
+
+if (!process.env.DB_PASSWORD) {
+  try {
+    const pyExe = "C:\\Users\\Dell\\AppData\\Local\\Programs\\pgAdmin 4\\python\\python.exe";
+    const pass = execSync(
+      `"${pyExe}" -c "import sys; sys.path.insert(0, 'server'); import queryAnalyticsDb; conn = queryAnalyticsDb.get_connection(); print(conn.password.decode('utf-8') if isinstance(conn.password, bytes) else str(conn.password))"`,
+      {
+        cwd: "C:\\Users\\Dell\\Superblock-Insight",
+        encoding: "utf-8",
+      }
+    ).trim();
+    if (pass) {
+      process.env.DB_PASSWORD = pass;
+    }
+  } catch {
+    // Ignore fallback
+  }
+}
 
 async function runTests() {
   console.log("=================================================");
