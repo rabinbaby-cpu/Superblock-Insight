@@ -58,8 +58,39 @@ async function getDbCredentials(): Promise<{ username: string; password: string 
   // Local / Direct environment fallback (for SSH tunnel or local testing)
   const username =
     process.env.DB_USER || process.env.PGUSER || "superblockhq";
-  const password =
+  let password =
     process.env.DB_PASSWORD || process.env.PGPASSWORD || "";
+
+  if (!password) {
+    try {
+      const fs = await import("fs");
+      const { execSync } = await import("child_process");
+
+      const pgAdminPython =
+        "C:\\Users\\Dell\\AppData\\Local\\Programs\\pgAdmin 4\\python\\python.exe";
+      const pythonExe =
+        process.env.PYTHON_PATH && fs.existsSync(process.env.PYTHON_PATH)
+          ? process.env.PYTHON_PATH
+          : fs.existsSync(pgAdminPython)
+          ? pgAdminPython
+          : "python";
+
+      const script =
+        "import sys, os; sys.path.insert(0, os.path.join(os.getcwd(), 'server')); import queryAnalyticsDb; conn = queryAnalyticsDb.get_connection(); print(conn.password.decode('utf-8') if isinstance(conn.password, bytes) else str(conn.password))";
+      const pass = execSync(`"${pythonExe}" -c "${script}"`, {
+        cwd: process.cwd(),
+        encoding: "utf-8",
+        stdio: ["ignore", "pipe", "ignore"],
+      }).trim();
+
+      if (pass) {
+        password = pass;
+        process.env.DB_PASSWORD = pass;
+      }
+    } catch {
+      // Ignore fallback failures when running outside local environment
+    }
+  }
 
   cachedCredentials = { username, password };
   return { username, password };
@@ -77,7 +108,7 @@ export async function getPool(): Promise<Pool> {
   const creds = await getDbCredentials();
 
   const host = process.env.DB_HOST || "127.0.0.1";
-  const port = parseInt(process.env.DB_PORT || "5432", 10);
+  const port = parseInt(process.env.DB_PORT || "5433", 10);
   const database = process.env.DB_NAME || "superblockhq";
 
   // Small connection pool configuration for serverless Lambda execution

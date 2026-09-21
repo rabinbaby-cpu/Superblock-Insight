@@ -380,3 +380,9 @@ export async function getCustomerOperations(customerId?: string, customerName?: 
   return { activities, products, deals, tasks, tickets, groups, notes };
 }
 
+export function invalidateAnalyticsCache(): void {
+  cachedData = null;
+  lastFetchTime = 0;
+}
+
+

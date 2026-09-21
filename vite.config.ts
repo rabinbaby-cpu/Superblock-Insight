@@ -6,6 +6,7 @@ import path from "node:path";
 import { defineConfig, type Plugin, type ViteDevServer } from "vite";
 import { vitePluginManusRuntime } from "vite-plugin-manus-runtime";
 import { getCustomerActivities, getCustomerProducts } from "./server/analyticsDb";
+import { app as expressApp } from "./server/index";
 
 // =============================================================================
 // Manus Debug Collector - Vite Plugin
@@ -291,6 +292,27 @@ function vitePluginCustomerAnalytics(): Plugin {
   };
 }
 
+function vitePluginExpressApi(): Plugin {
+  return {
+    name: "express-api-proxy",
+    configureServer(server: ViteDevServer) {
+      server.middlewares.use((req, res, next) => {
+        if (
+          req.url?.startsWith("/api/notes") ||
+          req.url?.startsWith("/api/customer-operations") ||
+          req.url?.startsWith("/api/customer-deals") ||
+          req.url?.startsWith("/api/customer-tasks") ||
+          req.url?.startsWith("/api/customer-tickets") ||
+          req.url?.startsWith("/api/customer-contact-groups")
+        ) {
+          return expressApp(req, res, next);
+        }
+        next();
+      });
+    },
+  };
+}
+
 const plugins = [
   react(),
   tailwindcss(),
@@ -300,6 +322,7 @@ const plugins = [
   vitePluginStorageProxy(),
   vitePluginUserSession(),
   vitePluginCustomerAnalytics(),
+  vitePluginExpressApi(),
 ];
 
 export default defineConfig({

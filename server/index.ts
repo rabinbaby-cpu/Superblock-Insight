@@ -10,17 +10,18 @@ import {
   getCustomerTickets,
   getCustomerContactGroups,
   getCustomerOperations,
+  invalidateAnalyticsCache,
 } from "./analyticsDb";
+import { createNoteHandler } from "./lambda/notes/createNote";
+import { getNotesHandler } from "./lambda/notes/getNotes";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-async function startServer() {
-  const app = express();
-  const server = createServer(app);
+export const app = express();
 
-  // Parse JSON payloads
-  app.use(express.json());
+// Parse JSON payloads
+app.use(express.json());
 
   // Session cookie management endpoint
   app.post("/api/set-user-session", (req, res) => {
@@ -137,6 +138,9 @@ async function startServer() {
     try {
       const customerId = (req.query.customerId as string) || "";
       const customerName = (req.query.customerName as string) || "";
+      if (req.query.refresh === "true" || req.query._t) {
+        invalidateAnalyticsCache();
+      }
       const operations = await getCustomerOperations(customerId, customerName);
       return res.json({ success: true, ...operations });
     } catch (error) {
@@ -150,9 +154,70 @@ async function startServer() {
         tasks: [],
         tickets: [],
         groups: [],
+        notes: [],
       });
     }
   });
+
+  app.get("/api/notes", async (req, res) => {
+    try {
+      const result = await getNotesHandler({
+        httpMethod: "GET",
+        path: "/notes",
+        headers: req.headers as Record<string, string | undefined>,
+        queryStringParameters: req.query as Record<string, string | undefined>,
+      });
+
+      let responseData: unknown;
+      try {
+        responseData = JSON.parse(result.body);
+      } catch {
+        responseData = { message: result.body };
+      }
+
+      return res.status(result.statusCode).json(responseData);
+    } catch (error: any) {
+      console.error("Error fetching notes:", error);
+      return res.status(500).json({
+        success: false,
+        error: error?.message || "Internal server error",
+        notes: [],
+      });
+    }
+  });
+
+  app.post("/api/notes", async (req, res) => {
+    try {
+      const result = await createNoteHandler({
+        httpMethod: "POST",
+        path: "/notes",
+        headers: req.headers as Record<string, string | undefined>,
+        body: typeof req.body === "string" ? req.body : JSON.stringify(req.body),
+      });
+
+      let responseData: unknown;
+      try {
+        responseData = JSON.parse(result.body);
+      } catch {
+        responseData = { message: result.body };
+      }
+
+      if (result.statusCode >= 200 && result.statusCode < 300) {
+        invalidateAnalyticsCache();
+      }
+
+      return res.status(result.statusCode).json(responseData);
+    } catch (error: any) {
+      console.error("Error creating note:", error);
+      return res.status(500).json({
+        success: false,
+        error: error?.message || "Internal server error",
+      });
+    }
+  });
+
+export async function startServer() {
+  const server = createServer(app);
 
   // Serve static files from dist/public in production
   const staticPath =
@@ -174,4 +239,7 @@ async function startServer() {
   });
 }
 
-startServer().catch(console.error);
+const isVite = process.argv.some((arg) => arg.includes("vite"));
+if (!isVite) {
+  startServer().catch(console.error);
+}

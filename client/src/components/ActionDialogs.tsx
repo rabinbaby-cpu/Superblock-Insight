@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import { Check, Copy, Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ export interface QuickFormDefaultValues {
   email?: string;
   plan?: string;
   description?: string;
+  customerId?: string;
 }
 
 export function QuickFormDialog({
@@ -21,16 +22,86 @@ export function QuickFormDialog({
   description,
   type = "general",
   defaultValues,
+  customerId,
 }: {
   trigger: ReactNode;
   title: string;
   description: string;
   type?: "general" | "note" | "meeting" | "customer" | "product";
   defaultValues?: QuickFormDefaultValues;
+  customerId?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const save = () => {
+  const [formName, setFormName] = useState(defaultValues?.name || "");
+  const [formContent, setFormContent] = useState(defaultValues?.description || "");
+
+  useEffect(() => {
+    if (open) {
+      setFormName(defaultValues?.name || "");
+      setFormContent(defaultValues?.description || "");
+    }
+  }, [open, defaultValues?.name, defaultValues?.description]);
+
+  const save = async () => {
+    if (type === "note") {
+      const targetCustomerId =
+        customerId ||
+        defaultValues?.customerId ||
+        (typeof window !== "undefined"
+          ? window.location.pathname.match(/\/customers\/([^/?#]+)/)?.[1]
+          : undefined);
+
+      if (!targetCustomerId) {
+        toast.error("Customer ID is required to create a note");
+        return;
+      }
+
+      if (!formContent.trim()) {
+        toast.error("Note content is required");
+        return;
+      }
+
+      setSaving(true);
+      try {
+        const response = await fetch("/api/notes", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            customerId: targetCustomerId,
+            title: formName.trim() || undefined,
+            content: formContent.trim(),
+          }),
+        });
+
+        const data = await response.json().catch(() => null);
+
+        if (!response.ok || (data && data.success === false)) {
+          throw new Error(data?.error || `Failed to save note (status ${response.status})`);
+        }
+
+        toast.success("Note saved", {
+          description: "Your note has been saved to the database.",
+        });
+        setOpen(false);
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("customer-operations-updated", {
+              detail: { customerId: targetCustomerId },
+            })
+          );
+        }
+      } catch (err: any) {
+        console.error("Error creating note:", err);
+        toast.error(err?.message || "Failed to save note");
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+
     setSaving(true);
     window.setTimeout(() => {
       setSaving(false);
@@ -42,16 +113,17 @@ export function QuickFormDialog({
       });
     }, 700);
   };
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent className="sm:max-w-[520px]">
         <DialogHeader><DialogTitle>{title}</DialogTitle><DialogDescription>{description}</DialogDescription></DialogHeader>
         <div className="grid gap-4 py-1">
-          <div className="grid gap-1.5"><Label htmlFor={`${title}-name`} className="text-xs">{type === "meeting" ? "Meeting title" : type === "note" ? "Note title" : type === "customer" ? "Company name" : "Name"}</Label><Input id={`${title}-name`} defaultValue={defaultValues?.name} placeholder={type === "meeting" ? "Q4 strategy review" : type === "note" ? "Add a clear title" : "Enter a name"} /></div>
+          <div className="grid gap-1.5"><Label htmlFor={`${title}-name`} className="text-xs">{type === "meeting" ? "Meeting title" : type === "note" ? "Note title" : type === "customer" ? "Company name" : "Name"}</Label><Input id={`${title}-name`} value={formName} onChange={(e) => setFormName(e.target.value)} placeholder={type === "meeting" ? "Q4 strategy review" : type === "note" ? "Add a clear title" : "Enter a name"} /></div>
           {type === "customer" && <div className="grid grid-cols-2 gap-3"><div className="grid gap-1.5"><Label className="text-xs">Contact email</Label><Input type="email" defaultValue={defaultValues?.email} placeholder="owner@company.com" /></div><div className="grid gap-1.5"><Label className="text-xs">Plan</Label><Select defaultValue={defaultValues?.plan || "growth"}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="starter">Starter</SelectItem><SelectItem value="growth">Growth</SelectItem><SelectItem value="advanced">Advanced</SelectItem></SelectContent></Select></div></div>}
           {type === "meeting" && <div className="grid grid-cols-2 gap-3"><div className="grid gap-1.5"><Label className="text-xs">Date</Label><Input type="date" /></div><div className="grid gap-1.5"><Label className="text-xs">Owner</Label><Select defaultValue="anika"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="anika">Anika Shah</SelectItem><SelectItem value="karan">Karan Mehta</SelectItem><SelectItem value="rishi">Rishi Kapoor</SelectItem></SelectContent></Select></div></div>}
-          <div className="grid gap-1.5"><Label className="text-xs">{type === "note" ? "Note" : type === "meeting" ? "Discussion summary" : "Description"}</Label><Textarea rows={4} defaultValue={defaultValues?.description} placeholder="Add context for your team…" /></div>
+          <div className="grid gap-1.5"><Label className="text-xs">{type === "note" ? "Note" : type === "meeting" ? "Discussion summary" : "Description"}</Label><Textarea rows={4} value={formContent} onChange={(e) => setFormContent(e.target.value)} placeholder="Add context for your team…" /></div>
         </div>
         <DialogFooter><Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button><Button onClick={save} disabled={saving}>{saving ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}{saving ? "Saving…" : "Save"}</Button></DialogFooter>
       </DialogContent>

@@ -121,6 +121,7 @@ def fetch_all():
     LEFT JOIN public.users u ON LOWER(c.client_user_id) = LOWER(u.user_name) 
                              OR LOWER(c.client_user_id) = LOWER(u.email)
                              OR LOWER(c.client_user_id) = LOWER(u.user_email)
+                             OR LOWER(c.client_user_id) = LOWER(u.user_id::text)
     ORDER BY ca.created_at DESC;
     """)
 
@@ -173,6 +174,7 @@ def fetch_all():
     LEFT JOIN public.users u ON LOWER(c.client_user_id) = LOWER(u.user_name) 
                              OR LOWER(c.client_user_id) = LOWER(u.email)
                              OR LOWER(c.client_user_id) = LOWER(u.user_email)
+                             OR LOWER(c.client_user_id) = LOWER(u.user_id::text)
     ORDER BY cp.created_at DESC;
     """)
 
@@ -232,6 +234,7 @@ def fetch_all():
     LEFT JOIN public.users u ON LOWER(c.client_user_id) = LOWER(u.user_name) 
                              OR LOWER(c.client_user_id) = LOWER(u.email)
                              OR LOWER(c.client_user_id) = LOWER(u.user_email)
+                             OR LOWER(c.client_user_id) = LOWER(u.user_id::text)
     ORDER BY cd.created_at DESC;
     """)
     deals = []
@@ -280,6 +283,7 @@ def fetch_all():
     LEFT JOIN public.users u ON LOWER(c.client_user_id) = LOWER(u.user_name) 
                              OR LOWER(c.client_user_id) = LOWER(u.email)
                              OR LOWER(c.client_user_id) = LOWER(u.user_email)
+                             OR LOWER(c.client_user_id) = LOWER(u.user_id::text)
     ORDER BY ct.created_at DESC;
     """)
     tasks = []
@@ -349,6 +353,7 @@ def fetch_all():
     LEFT JOIN public.users u ON LOWER(c.client_user_id) = LOWER(u.user_name) 
                              OR LOWER(c.client_user_id) = LOWER(u.email)
                              OR LOWER(c.client_user_id) = LOWER(u.user_email)
+                             OR LOWER(c.client_user_id) = LOWER(u.user_id::text)
     ORDER BY tk.created_at DESC;
     """)
     tickets = []
@@ -391,6 +396,7 @@ def fetch_all():
     LEFT JOIN public.users u ON LOWER(c.client_user_id) = LOWER(u.user_name) 
                              OR LOWER(c.client_user_id) = LOWER(u.email)
                              OR LOWER(c.client_user_id) = LOWER(u.user_email)
+                             OR LOWER(c.client_user_id) = LOWER(u.user_id::text)
     ORDER BY cg.total_count DESC, cg.created_at DESC;
     """)
     groups = []
@@ -428,6 +434,7 @@ def fetch_all():
     LEFT JOIN public.users u ON LOWER(c.client_user_id) = LOWER(u.user_name) 
                              OR LOWER(c.client_user_id) = LOWER(u.email)
                              OR LOWER(c.client_user_id) = LOWER(u.user_email)
+                             OR LOWER(c.client_user_id) = LOWER(u.user_id::text)
     ORDER BY n.created_at DESC;
     """)
     notes = []

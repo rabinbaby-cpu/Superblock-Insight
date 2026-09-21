@@ -210,6 +210,17 @@ export default function CustomerDetail() {
   }
 
   const [realOperations, setRealOperations] = useState<CustomerOperationsPayload | null>(null);
+  const [operationsRefreshKey, setOperationsRefreshKey] = useState(0);
+
+  useEffect(() => {
+    const onOperationsUpdated = () => {
+      setOperationsRefreshKey((k) => k + 1);
+    };
+    window.addEventListener("customer-operations-updated", onOperationsUpdated);
+    return () => {
+      window.removeEventListener("customer-operations-updated", onOperationsUpdated);
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -222,7 +233,7 @@ export default function CustomerDetail() {
     const customerName = rawCustomer.company || "";
 
     fetch(
-      `/api/customer-operations?customerId=${encodeURIComponent(customerId)}&customerName=${encodeURIComponent(customerName)}`
+      `/api/customer-operations?customerId=${encodeURIComponent(customerId)}&customerName=${encodeURIComponent(customerName)}&refresh=true&_t=${Date.now()}`
     )
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
@@ -237,7 +248,7 @@ export default function CustomerDetail() {
     return () => {
       cancelled = true;
     };
-  }, [rawCustomer?.id, rawCustomer?.company]);
+  }, [rawCustomer?.id, rawCustomer?.company, operationsRefreshKey]);
 
   const customer = useMemo(() => {
     if (!rawCustomer) return null;
