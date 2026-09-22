@@ -28,7 +28,10 @@ interface CreateMeetingResponse {
   error?: string;
 }
 
-const PRODUCTION_BASE =
+const PRODUCTION_CUSTOMER_BASE =
+  "https://api.superblock.chat/customeranalytics";
+
+const PRODUCTION_DASHBOARD_BASE =
   "https://api.superblock.chat/customeranalyticsdashboard";
 
 async function authHeaders(): Promise<Record<string, string>> {
@@ -38,14 +41,16 @@ async function authHeaders(): Promise<Record<string, string>> {
 
   try {
     const session = await fetchAuthSession();
-    // Strictly send the Cognito ACCESS TOKEN in Authorization: Bearer <token>
-    const token = session?.tokens?.accessToken?.toString() || "";
+    const token =
+      session?.tokens?.accessToken?.toString() ||
+      session?.tokens?.idToken?.toString() ||
+      "";
 
     if (token) {
       headers.Authorization = `Bearer ${token}`;
     }
   } catch (error) {
-    console.warn("Could not retrieve Cognito auth session:", error);
+    console.warn("Could not retrieve Cognito auth session for meetings:", error);
   }
 
   return headers;
@@ -59,16 +64,6 @@ function isLocalhost(): boolean {
   );
 }
 
-function meetingsUrl(customerId: string): string {
-  const encoded = encodeURIComponent(customerId);
-
-  if (isLocalhost()) {
-    return `/api/meetings?customerId=${encoded}`;
-  }
-
-  return `${PRODUCTION_BASE}/meetings?customerId=${encoded}`;
-}
-
 export async function getCustomerMeetings(
   customerId: string
 ): Promise<MeetingRecord[]> {
@@ -76,17 +71,41 @@ export async function getCustomerMeetings(
     throw new Error("Customer ID is required");
   }
 
-  const response = await fetch(meetingsUrl(customerId), {
-    method: "GET",
-    headers: await authHeaders(),
-  });
+  const headers = await authHeaders();
 
+  if (isLocalhost()) {
+    const response = await fetch(
+      `/api/meetings?customerId=${encodeURIComponent(customerId)}`,
+      { method: "GET", headers }
+    );
+    const data = (await response.json().catch(() => null)) as MeetingsResponse | null;
+    if (!response.ok || !data?.success) {
+      throw new Error(data?.error || `Failed to fetch meetings (status ${response.status})`);
+    }
+    return Array.isArray(data.meetings) ? data.meetings : [];
+  }
+
+  // Production: Try customeranalytics?action=meetings first
+  try {
+    const customerApiUrl = `${PRODUCTION_CUSTOMER_BASE}?action=meetings&customerId=${encodeURIComponent(customerId)}`;
+    const response = await fetch(customerApiUrl, { method: "GET", headers });
+    if (response.ok) {
+      const data = (await response.json().catch(() => null)) as MeetingsResponse | null;
+      if (data?.success && Array.isArray(data.meetings)) {
+        return data.meetings;
+      }
+    }
+  } catch (err) {
+    console.warn("Meetings fetch from customeranalytics failed, trying dashboard base:", err);
+  }
+
+  // Fallback to customeranalyticsdashboard/meetings
+  const dashboardUrl = `${PRODUCTION_DASHBOARD_BASE}/meetings?customerId=${encodeURIComponent(customerId)}`;
+  const response = await fetch(dashboardUrl, { method: "GET", headers });
   const data = (await response.json().catch(() => null)) as MeetingsResponse | null;
 
   if (!response.ok || !data?.success) {
-    throw new Error(
-      data?.error || `Failed to fetch meetings (status ${response.status})`
-    );
+    throw new Error(data?.error || `Failed to fetch meetings (status ${response.status})`);
   }
 
   return Array.isArray(data.meetings) ? data.meetings : [];
@@ -110,30 +129,58 @@ export async function createCustomerMeeting(input: {
     throw new Error("Meeting title is required");
   }
 
-  const response = await fetch(
-    isLocalhost() ? "/api/meetings" : `${PRODUCTION_BASE}/meetings`,
-    {
+  const headers = await authHeaders();
+  const payload = {
+    action: "create_meeting",
+    customerId: input.customerId,
+    title: input.title.trim(),
+    description: input.description?.trim() || null,
+    meetingDate: input.meetingDate || null,
+    durationMinutes: input.durationMinutes ?? null,
+    status: input.status || "scheduled",
+    meetingUrl: input.meetingUrl || null,
+    createdBy: input.createdBy || null,
+  };
+
+  if (isLocalhost()) {
+    const response = await fetch("/api/meetings", {
       method: "POST",
-      headers: await authHeaders(),
-      body: JSON.stringify({
-        customerId: input.customerId,
-        title: input.title.trim(),
-        description: input.description?.trim() || null,
-        meetingDate: input.meetingDate || null,
-        durationMinutes: input.durationMinutes ?? null,
-        status: input.status || "scheduled",
-        meetingUrl: input.meetingUrl || null,
-        createdBy: input.createdBy || null,
-      }),
+      headers,
+      body: JSON.stringify(payload),
+    });
+    const data = (await response.json().catch(() => null)) as CreateMeetingResponse | null;
+    if (!response.ok || !data?.success || !data.meeting) {
+      throw new Error(data?.error || `Failed to create meeting (status ${response.status})`);
     }
-  );
+    return data.meeting;
+  }
+
+  // Production: Try customeranalytics with action=create_meeting
+  try {
+    const customerApiUrl = `${PRODUCTION_CUSTOMER_BASE}?action=create_meeting`;
+    const response = await fetch(customerApiUrl, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload),
+    });
+    const data = (await response.json().catch(() => null)) as CreateMeetingResponse | null;
+    if (response.ok && data?.success && data.meeting) {
+      return data.meeting;
+    }
+  } catch (err) {
+    console.warn("POST meeting to customeranalytics failed, trying dashboard base:", err);
+  }
+
+  // Fallback to customeranalyticsdashboard/meetings
+  const response = await fetch(`${PRODUCTION_DASHBOARD_BASE}/meetings`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload),
+  });
 
   const data = (await response.json().catch(() => null)) as CreateMeetingResponse | null;
-
   if (!response.ok || !data?.success || !data.meeting) {
-    throw new Error(
-      data?.error || `Failed to create meeting (status ${response.status})`
-    );
+    throw new Error(data?.error || `Failed to create meeting (status ${response.status})`);
   }
 
   return data.meeting;

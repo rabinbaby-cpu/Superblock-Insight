@@ -60,6 +60,9 @@ interface ProductsResponse {
   error?: string;
 }
 
+const PRODUCTION_CUSTOMER_BASE =
+  "https://api.superblock.chat/customeranalytics";
+
 const PRODUCTION_DASHBOARD_BASE =
   "https://api.superblock.chat/customeranalyticsdashboard";
 
@@ -72,7 +75,7 @@ function isLocalhost(): boolean {
 }
 
 /**
- * Returns request headers with the Cognito ACCESS token in Authorization: Bearer <token>.
+ * Returns request headers with the Cognito access token, identical to customerAnalytics.ts.
  */
 async function authHeaders(): Promise<Record<string, string>> {
   const headers: Record<string, string> = {
@@ -81,8 +84,10 @@ async function authHeaders(): Promise<Record<string, string>> {
 
   try {
     const session = await fetchAuthSession();
-    // Strictly send the Cognito ACCESS TOKEN
-    const token = session?.tokens?.accessToken?.toString() || "";
+    const token =
+      session?.tokens?.accessToken?.toString() ||
+      session?.tokens?.idToken?.toString() ||
+      "";
     if (token) {
       headers.Authorization = `Bearer ${token}`;
     }
@@ -94,82 +99,151 @@ async function authHeaders(): Promise<Record<string, string>> {
 }
 
 /**
- * Fetches invoices for a customer from customeranalyticsdashboard/invoices.
+ * Fetches invoices for a customer from customeranalytics?action=invoices or dashboard.
  */
 export async function getCustomerInvoices(
   customerId: string
 ): Promise<InvoiceRecord[]> {
   if (!customerId) return [];
 
+  const headers = await authHeaders();
   const encoded = encodeURIComponent(customerId);
-  const url = isLocalhost()
-    ? `/api/invoices?customerId=${encoded}`
-    : `${PRODUCTION_DASHBOARD_BASE}/invoices?customerId=${encoded}`;
 
-  const response = await fetch(url, {
+  if (isLocalhost()) {
+    const response = await fetch(`/api/invoices?customerId=${encoded}`, {
+      method: "GET",
+      headers,
+    });
+    const data = (await response.json().catch(() => null)) as InvoicesResponse | null;
+    if (!response.ok || !data?.success) {
+      throw new Error(data?.error || `Failed to fetch invoices (status ${response.status})`);
+    }
+    return Array.isArray(data.invoices) ? data.invoices : [];
+  }
+
+  // Production: Try customeranalytics?action=invoices
+  try {
+    const customerApiUrl = `${PRODUCTION_CUSTOMER_BASE}?action=invoices&customerId=${encoded}`;
+    const response = await fetch(customerApiUrl, { method: "GET", headers });
+    if (response.ok) {
+      const data = (await response.json().catch(() => null)) as InvoicesResponse | null;
+      if (data?.success && Array.isArray(data.invoices)) {
+        return data.invoices;
+      }
+    }
+  } catch (err) {
+    console.warn("Invoices fetch via customeranalytics failed, trying dashboard base:", err);
+  }
+
+  // Fallback to customeranalyticsdashboard/invoices
+  const dashboardUrl = `${PRODUCTION_DASHBOARD_BASE}/invoices?customerId=${encoded}`;
+  const response = await fetch(dashboardUrl, {
     method: "GET",
-    headers: await authHeaders(),
+    headers,
   });
 
   const data = (await response.json().catch(() => null)) as InvoicesResponse | null;
-
   if (!response.ok || !data?.success) {
-    throw new Error(
-      data?.error || `Failed to fetch invoices (status ${response.status})`
-    );
+    throw new Error(data?.error || `Failed to fetch invoices (status ${response.status})`);
   }
 
   return Array.isArray(data.invoices) ? data.invoices : [];
 }
 
 /**
- * Fetches subscriptions for a customer from customeranalyticsdashboard/subscriptions.
+ * Fetches subscriptions for a customer from customeranalytics?action=subscriptions or dashboard.
  */
 export async function getCustomerSubscriptions(
   customerId: string
 ): Promise<SubscriptionRecord[]> {
   if (!customerId) return [];
 
+  const headers = await authHeaders();
   const encoded = encodeURIComponent(customerId);
-  const url = isLocalhost()
-    ? `/api/subscriptions?customerId=${encoded}`
-    : `${PRODUCTION_DASHBOARD_BASE}/subscriptions?customerId=${encoded}`;
 
-  const response = await fetch(url, {
+  if (isLocalhost()) {
+    const response = await fetch(`/api/subscriptions?customerId=${encoded}`, {
+      method: "GET",
+      headers,
+    });
+    const data = (await response.json().catch(() => null)) as SubscriptionsResponse | null;
+    if (!response.ok || !data?.success) {
+      throw new Error(data?.error || `Failed to fetch subscriptions (status ${response.status})`);
+    }
+    return Array.isArray(data.subscriptions) ? data.subscriptions : [];
+  }
+
+  // Production: Try customeranalytics?action=subscriptions
+  try {
+    const customerApiUrl = `${PRODUCTION_CUSTOMER_BASE}?action=subscriptions&customerId=${encoded}`;
+    const response = await fetch(customerApiUrl, { method: "GET", headers });
+    if (response.ok) {
+      const data = (await response.json().catch(() => null)) as SubscriptionsResponse | null;
+      if (data?.success && Array.isArray(data.subscriptions)) {
+        return data.subscriptions;
+      }
+    }
+  } catch (err) {
+    console.warn("Subscriptions fetch via customeranalytics failed, trying dashboard base:", err);
+  }
+
+  // Fallback to customeranalyticsdashboard/subscriptions
+  const dashboardUrl = `${PRODUCTION_DASHBOARD_BASE}/subscriptions?customerId=${encoded}`;
+  const response = await fetch(dashboardUrl, {
     method: "GET",
-    headers: await authHeaders(),
+    headers,
   });
 
   const data = (await response.json().catch(() => null)) as SubscriptionsResponse | null;
-
   if (!response.ok || !data?.success) {
-    throw new Error(
-      data?.error || `Failed to fetch subscriptions (status ${response.status})`
-    );
+    throw new Error(data?.error || `Failed to fetch subscriptions (status ${response.status})`);
   }
 
   return Array.isArray(data.subscriptions) ? data.subscriptions : [];
 }
 
 /**
- * Fetches billing products catalog from customeranalyticsdashboard/products.
+ * Fetches billing products catalog.
  */
 export async function getBillingProducts(): Promise<ProductRecord[]> {
-  const url = isLocalhost()
-    ? "/api/products"
-    : `${PRODUCTION_DASHBOARD_BASE}/products`;
+  const headers = await authHeaders();
 
-  const response = await fetch(url, {
+  if (isLocalhost()) {
+    const response = await fetch("/api/products", {
+      method: "GET",
+      headers,
+    });
+    const data = (await response.json().catch(() => null)) as ProductsResponse | null;
+    if (!response.ok || !data?.success) {
+      throw new Error(data?.error || `Failed to fetch products (status ${response.status})`);
+    }
+    return Array.isArray(data.products) ? data.products : [];
+  }
+
+  // Production: Try customeranalytics?action=products
+  try {
+    const customerApiUrl = `${PRODUCTION_CUSTOMER_BASE}?action=products`;
+    const response = await fetch(customerApiUrl, { method: "GET", headers });
+    if (response.ok) {
+      const data = (await response.json().catch(() => null)) as ProductsResponse | null;
+      if (data?.success && Array.isArray(data.products)) {
+        return data.products;
+      }
+    }
+  } catch (err) {
+    console.warn("Products fetch via customeranalytics failed, trying dashboard base:", err);
+  }
+
+  // Fallback to customeranalyticsdashboard/products
+  const dashboardUrl = `${PRODUCTION_DASHBOARD_BASE}/products`;
+  const response = await fetch(dashboardUrl, {
     method: "GET",
-    headers: await authHeaders(),
+    headers,
   });
 
   const data = (await response.json().catch(() => null)) as ProductsResponse | null;
-
   if (!response.ok || !data?.success) {
-    throw new Error(
-      data?.error || `Failed to fetch products (status ${response.status})`
-    );
+    throw new Error(data?.error || `Failed to fetch products (status ${response.status})`);
   }
 
   return Array.isArray(data.products) ? data.products : [];
