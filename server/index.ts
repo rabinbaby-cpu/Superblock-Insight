@@ -14,6 +14,8 @@ import {
 } from "./analyticsDb";
 import { createNoteHandler } from "./lambda/notes/createNote";
 import { getNotesHandler } from "./lambda/notes/getNotes";
+import { deleteNoteHandler } from "./lambda/notes/deleteNote";
+import { updateNoteHandler } from "./lambda/notes/updateNote";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -215,6 +217,70 @@ app.use(express.json());
       });
     }
   });
+
+  app.delete("/api/notes/:id", async (req, res) => {
+    try {
+      const result = await deleteNoteHandler({
+        httpMethod: "DELETE",
+        path: `/notes/${req.params.id}`,
+        pathParameters: { id: req.params.id },
+        headers: req.headers as Record<string, string | undefined>,
+      });
+
+      let responseData: unknown;
+      try {
+        responseData = JSON.parse(result.body);
+      } catch {
+        responseData = { message: result.body };
+      }
+
+      if (result.statusCode >= 200 && result.statusCode < 300) {
+        invalidateAnalyticsCache();
+      }
+
+      return res.status(result.statusCode).json(responseData);
+    } catch (error: any) {
+      console.error("Error deleting note:", error);
+      return res.status(500).json({
+        success: false,
+        error: error?.message || "Internal server error",
+      });
+    }
+  });
+
+  const handleUpdateNote = async (req: express.Request, res: express.Response) => {
+    try {
+      const result = await updateNoteHandler({
+        httpMethod: req.method,
+        path: `/notes/${req.params.id}`,
+        pathParameters: { id: req.params.id },
+        headers: req.headers as Record<string, string | undefined>,
+        body: typeof req.body === "string" ? req.body : JSON.stringify(req.body),
+      });
+
+      let responseData: unknown;
+      try {
+        responseData = JSON.parse(result.body);
+      } catch {
+        responseData = { message: result.body };
+      }
+
+      if (result.statusCode >= 200 && result.statusCode < 300) {
+        invalidateAnalyticsCache();
+      }
+
+      return res.status(result.statusCode).json(responseData);
+    } catch (error: any) {
+      console.error("Error updating note:", error);
+      return res.status(500).json({
+        success: false,
+        error: error?.message || "Internal server error",
+      });
+    }
+  };
+
+  app.put("/api/notes/:id", handleUpdateNote);
+  app.patch("/api/notes/:id", handleUpdateNote);
 
 export async function startServer() {
   const server = createServer(app);

@@ -47,6 +47,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -58,6 +59,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -1436,6 +1438,85 @@ function Notes({ customer }: { customer: Customer }) {
     setNotes(customer.notes || []);
   }, [customer.notes, customer.id]);
 
+  const handleDelete = async (noteId: string) => {
+    try {
+      const res = await fetch(`/api/notes/${encodeURIComponent(noteId)}`, {
+        method: "DELETE",
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || (data && data.success === false)) {
+        throw new Error(data?.error || `Failed to delete note (status ${res.status})`);
+      }
+      setNotes((prev) => prev.filter((item) => item.id !== noteId));
+      toast.success("Note deleted", {
+        description: "The note has been removed from the database.",
+      });
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("customer-operations-updated", {
+            detail: { customerId: customer.id },
+          })
+        );
+      }
+      return true;
+    } catch (err: any) {
+      console.error("Error deleting note:", err);
+      toast.error(err?.message || "Failed to delete note");
+      return false;
+    }
+  };
+
+  const handleUpdate = async (noteId: string, title: string, content: string) => {
+    try {
+      const res = await fetch(`/api/notes/${encodeURIComponent(noteId)}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          title: title.trim() || undefined,
+          content: content.trim(),
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || (data && data.success === false)) {
+        throw new Error(data?.error || `Failed to update note (status ${res.status})`);
+      }
+      const updatedNoteRecord = data.note;
+      setNotes((prev) =>
+        prev.map((item) =>
+          item.id === noteId
+            ? {
+                ...item,
+                title: updatedNoteRecord?.title ?? title,
+                content: updatedNoteRecord?.content ?? content,
+                updatedAt: new Date().toLocaleDateString("en-US", {
+                  day: "2-digit",
+                  month: "short",
+                  year: "numeric",
+                }),
+              }
+            : item
+        )
+      );
+      toast.success("Note updated", {
+        description: "Your note changes have been saved.",
+      });
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("customer-operations-updated", {
+            detail: { customerId: customer.id },
+          })
+        );
+      }
+      return true;
+    } catch (err: any) {
+      console.error("Error updating note:", err);
+      toast.error(err?.message || "Failed to update note");
+      return false;
+    }
+  };
+
   const filtered = notes.filter(
     (note) =>
       `${note.title} ${note.content}`.toLowerCase().includes(query.toLowerCase()) &&
@@ -1512,10 +1593,8 @@ function Notes({ customer }: { customer: Customer }) {
               <NoteRow
                 key={note.id}
                 note={note}
-                onDelete={() => {
-                  setNotes(notes.filter((item) => item.id !== note.id));
-                  toast.success("Note deleted");
-                }}
+                onDelete={handleDelete}
+                onUpdate={handleUpdate}
               />
             ))}
           </div>
@@ -1525,7 +1604,58 @@ function Notes({ customer }: { customer: Customer }) {
   );
 }
 
-function NoteRow({ note, onDelete }: { note: Note; onDelete: () => void }) {
+function NoteRow({
+  note,
+  onDelete,
+  onUpdate,
+}: {
+  note: Note;
+  onDelete: (id: string) => Promise<boolean>;
+  onUpdate: (id: string, title: string, content: string) => Promise<boolean>;
+}) {
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [editTitle, setEditTitle] = useState(note.title);
+  const [editContent, setEditContent] = useState(note.content);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    if (isEditOpen) {
+      setEditTitle(note.title);
+      setEditContent(note.content);
+    }
+  }, [isEditOpen, note.title, note.content]);
+
+  const handleEditSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!editContent.trim()) {
+      toast.error("Note content is required");
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const ok = await onUpdate(note.id, editTitle, editContent);
+      if (ok) {
+        setIsEditOpen(false);
+      }
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteConfirm = async () => {
+    setIsDeleting(true);
+    try {
+      const ok = await onDelete(note.id);
+      if (ok) {
+        setIsDeleteOpen(false);
+      }
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   return (
     <div className="p-4 hover:bg-muted/20">
       <div className="flex items-start gap-3">
@@ -1549,7 +1679,7 @@ function NoteRow({ note, onDelete }: { note: Note; onDelete: () => void }) {
               {note.category}
             </span>
           </div>
-          <p className="mt-2 max-w-4xl text-[12px] leading-5 text-muted-foreground">
+          <p className="mt-2 max-w-4xl whitespace-pre-wrap text-[12px] leading-5 text-muted-foreground">
             {note.content}
           </p>
           <div className="mt-2 font-mono text-[10px] text-muted-foreground">
@@ -1563,18 +1693,117 @@ function NoteRow({ note, onDelete }: { note: Note; onDelete: () => void }) {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => toast.success("Note edit mode opened")}>
+            <DropdownMenuItem onSelect={() => setIsEditOpen(true)}>
               <Edit3 className="size-3.5" />
               Edit
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-rose-600" onClick={onDelete}>
+            <DropdownMenuItem
+              className="text-rose-600 focus:text-rose-600"
+              onSelect={() => setIsDeleteOpen(true)}
+            >
               <Trash2 className="size-3.5" />
               Delete
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+
+      {/* Edit Note Dialog */}
+      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="text-base font-semibold">Edit note</DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Update note title and operational context for this customer.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleEditSubmit} className="space-y-3 pt-2">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Title</label>
+              <Input
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+                placeholder="Note title (optional)"
+                className="text-xs"
+                disabled={isSaving}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Content</label>
+              <Textarea
+                value={editContent}
+                onChange={(e) => setEditContent(e.target.value)}
+                placeholder="Enter note content..."
+                rows={5}
+                className="text-xs"
+                disabled={isSaving}
+                required
+              />
+            </div>
+            <DialogFooter className="gap-2 sm:gap-0 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setIsEditOpen(false)}
+                disabled={isSaving}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" size="sm" disabled={isSaving}>
+                {isSaving ? (
+                  <>
+                    <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  "Save changes"
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle className="text-base font-semibold">Delete note</DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Are you sure you want to delete &ldquo;{note.title || "this note"}&rdquo;? This action cannot be undone and will permanently remove the note from the database.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0 pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setIsDeleteOpen(false)}
+              disabled={isDeleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              onClick={handleDeleteConfirm}
+              disabled={isDeleting}
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                "Delete note"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
