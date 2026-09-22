@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
+import { fetchAuthSession } from "aws-amplify/auth";
 
 export interface QuickFormDefaultValues {
   name?: string;
@@ -64,17 +65,36 @@ export function QuickFormDialog({
 
       setSaving(true);
       try {
-        const response = await fetch("/api/notes", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            customerId: targetCustomerId,
-            title: formName.trim() || undefined,
-            content: formContent.trim(),
-          }),
-        });
+        let token = "";
+        try {
+          const session = await fetchAuthSession();
+          token =
+            session?.tokens?.idToken?.toString() ||
+            session?.tokens?.accessToken?.toString() ||
+            "";
+        } catch (authErr) {
+          console.warn("Could not retrieve Cognito auth session:", authErr);
+        }
+
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+        };
+        if (token) {
+          headers["Authorization"] = `Bearer ${token}`;
+        }
+
+        const response = await fetch(
+          "https://api.superblock.chat/customeranalyticsdashboard/notes",
+          {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+              customerId: targetCustomerId,
+              title: formName.trim() || undefined,
+              content: formContent.trim(),
+            }),
+          }
+        );
 
         const data = await response.json().catch(() => null);
 
