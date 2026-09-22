@@ -1,4 +1,4 @@
-﻿import { fetchAuthSession } from "aws-amplify/auth";
+import { fetchAuthSession } from "aws-amplify/auth";
 
 export interface MeetingRecord {
   id: string;
@@ -38,10 +38,8 @@ async function authHeaders(): Promise<Record<string, string>> {
 
   try {
     const session = await fetchAuthSession();
-    const token =
-      session?.tokens?.idToken?.toString() ||
-      session?.tokens?.accessToken?.toString() ||
-      "";
+    // Strictly send the Cognito ACCESS TOKEN in Authorization: Bearer <token>
+    const token = session?.tokens?.accessToken?.toString() || "";
 
     if (token) {
       headers.Authorization = `Bearer ${token}`;

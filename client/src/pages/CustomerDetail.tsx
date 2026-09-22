@@ -42,8 +42,19 @@ import {
   downloadCsv,
 } from "@/components/dashboard-ui";
 import { CopyButton, QuickFormDialog } from "@/components/ActionDialogs";
-import { getCustomerMeetings, type MeetingRecord } from "@/lib/api/meetings";
 import { Button } from "@/components/ui/button";
+import { getCustomerMeetings, type MeetingRecord } from "@/lib/api/meetings";
+import {
+  getCustomerNotes,
+  updateCustomerNote,
+  deleteCustomerNote,
+} from "@/lib/api/notes";
+import {
+  getCustomerInvoices,
+  getCustomerSubscriptions,
+  type InvoiceRecord,
+  type SubscriptionRecord,
+} from "@/lib/api/billing";
 import {
   Dialog,
   DialogContent,
@@ -256,31 +267,10 @@ export default function CustomerDetail() {
           }
         }
 
-        // On production or if customer-operations fails, fetch official notes API
-        let token = "";
+        // Fetch official notes using Cognito access token & customeranalyticsdashboard/notes
         try {
-          const session = await fetchAuthSession();
-          token =
-            session?.tokens?.idToken?.toString() ||
-            session?.tokens?.accessToken?.toString() ||
-            "";
-        } catch {
-          // ignore
-        }
-
-        const headers: Record<string, string> = {};
-        if (token) {
-          headers["Authorization"] = `Bearer ${token}`;
-        }
-
-        const notesUrl = isLocal
-          ? `/api/notes?customerId=${encodeURIComponent(customerId)}`
-          : `https://api.superblock.chat/customeranalyticsdashboard/notes?customerId=${encodeURIComponent(customerId)}`;
-
-        const notesRes = await fetch(notesUrl, { headers });
-        if (notesRes.ok) {
-          const notesData = await notesRes.json();
-          if (!cancelled && notesData?.success && Array.isArray(notesData?.notes)) {
+          const notes = await getCustomerNotes(customerId);
+          if (!cancelled && Array.isArray(notes)) {
             setRealOperations((prev) => ({
               activities: prev?.activities || [],
               products: prev?.products || [],
@@ -288,9 +278,11 @@ export default function CustomerDetail() {
               tasks: prev?.tasks || [],
               tickets: prev?.tickets || [],
               groups: prev?.groups || [],
-              notes: notesData.notes,
+              notes: notes,
             } as any));
           }
+        } catch (notesErr) {
+          console.warn("Could not fetch notes from customeranalyticsdashboard:", notesErr);
         }
       } catch (err) {
         console.error("Failed to fetch customer operations/notes:", err);
@@ -1522,39 +1514,7 @@ function Notes({ customer }: { customer: Customer }) {
 
   const handleDelete = async (noteId: string) => {
     try {
-      const isLocal =
-        typeof window !== "undefined" &&
-        (window.location.hostname === "localhost" ||
-          window.location.hostname === "127.0.0.1");
-
-      let token = "";
-      try {
-        const session = await fetchAuthSession();
-        token =
-          session?.tokens?.idToken?.toString() ||
-          session?.tokens?.accessToken?.toString() ||
-          "";
-      } catch (authErr) {
-        console.warn("Could not retrieve Cognito auth session:", authErr);
-      }
-
-      const headers: Record<string, string> = {};
-      if (token) {
-        headers["Authorization"] = `Bearer ${token}`;
-      }
-
-      const url = isLocal
-        ? `/api/notes/${encodeURIComponent(noteId)}`
-        : `https://api.superblock.chat/customeranalyticsdashboard/notes/${encodeURIComponent(noteId)}`;
-
-      const res = await fetch(url, {
-        method: "DELETE",
-        headers,
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok || (data && data.success === false)) {
-        throw new Error(data?.error || `Failed to delete note (status ${res.status})`);
-      }
+      await deleteCustomerNote(noteId);
       setNotes((prev) => prev.filter((item) => item.id !== noteId));
       toast.success("Note deleted", {
         description: "The note has been removed from the database.",
@@ -1576,46 +1536,7 @@ function Notes({ customer }: { customer: Customer }) {
 
   const handleUpdate = async (noteId: string, title: string, content: string) => {
     try {
-      const isLocal =
-        typeof window !== "undefined" &&
-        (window.location.hostname === "localhost" ||
-          window.location.hostname === "127.0.0.1");
-
-      let token = "";
-      try {
-        const session = await fetchAuthSession();
-        token =
-          session?.tokens?.idToken?.toString() ||
-          session?.tokens?.accessToken?.toString() ||
-          "";
-      } catch (authErr) {
-        console.warn("Could not retrieve Cognito auth session:", authErr);
-      }
-
-      const headers: Record<string, string> = {
-        "Content-Type": "application/json",
-      };
-      if (token) {
-        headers["Authorization"] = `Bearer ${token}`;
-      }
-
-      const url = isLocal
-        ? `/api/notes/${encodeURIComponent(noteId)}`
-        : `https://api.superblock.chat/customeranalyticsdashboard/notes/${encodeURIComponent(noteId)}`;
-
-      const res = await fetch(url, {
-        method: "PUT",
-        headers,
-        body: JSON.stringify({
-          title: title.trim() || undefined,
-          content: content.trim(),
-        }),
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok || (data && data.success === false)) {
-        throw new Error(data?.error || `Failed to update note (status ${res.status})`);
-      }
-      const updatedNoteRecord = data.note;
+      const updatedNoteRecord = await updateCustomerNote(noteId, { title, content });
       setNotes((prev) =>
         prev.map((item) =>
           item.id === noteId
@@ -1638,7 +1559,7 @@ function Notes({ customer }: { customer: Customer }) {
       if (typeof window !== "undefined") {
         window.dispatchEvent(
           new CustomEvent("customer-operations-updated", {
-            detail: { customerId: customer.id },
+            detail: { customerId: customer.id, note: updatedNoteRecord },
           })
         );
       }

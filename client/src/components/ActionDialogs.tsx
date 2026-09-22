@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { fetchAuthSession } from "aws-amplify/auth";
 import { createCustomerMeeting } from "@/lib/api/meetings";
+import { createCustomerNote } from "@/lib/api/notes";
 
 export interface QuickFormDefaultValues {
   name?: string;
@@ -70,67 +71,11 @@ export function QuickFormDialog({
 
       setSaving(true);
       try {
-        let token = "";
-        try {
-          const session = await fetchAuthSession();
-          token =
-            session?.tokens?.idToken?.toString() ||
-            session?.tokens?.accessToken?.toString() ||
-            "";
-        } catch (authErr) {
-          console.warn("Could not retrieve Cognito auth session:", authErr);
-        }
-
-        const headers: Record<string, string> = {
-          "Content-Type": "application/json",
-        };
-        if (token) {
-          headers["Authorization"] = `Bearer ${token}`;
-        }
-
-        const isLocal =
-          typeof window !== "undefined" &&
-          (window.location.hostname === "localhost" ||
-            window.location.hostname === "127.0.0.1");
-
-        const targetUrl = isLocal
-          ? "/api/notes"
-          : "https://api.superblock.chat/customeranalyticsdashboard/notes";
-
-        const requestBody = {
+        const createdNote = await createCustomerNote({
           customerId: targetCustomerId,
-          customer_id: targetCustomerId,
           title: formName.trim() || undefined,
           content: formContent.trim(),
-        };
-
-        const response = await fetch(targetUrl, {
-          method: "POST",
-          headers,
-          body: JSON.stringify(requestBody),
         });
-
-        const data = await response.json().catch(() => null);
-
-        if (!response.ok) {
-          throw new Error(
-            data?.error || `Failed to save note (HTTP ${response.status})`
-          );
-        }
-
-        if (!data || data.success === false) {
-          throw new Error(
-            data?.error || "Backend reported failure saving note"
-          );
-        }
-
-        // Strictly verify that a persisted note was returned by the database INSERT
-        const createdNote = data.note || data.data;
-        if (!createdNote || !createdNote.id) {
-          throw new Error(
-            "Backend failed to persist note to database (no created note returned)"
-          );
-        }
 
         toast.success("Note saved", {
           description: "Your note has been saved to the database.",
