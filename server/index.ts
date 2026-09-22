@@ -16,6 +16,11 @@ import { createNoteHandler } from "./lambda/notes/createNote";
 import { getNotesHandler } from "./lambda/notes/getNotes";
 import { deleteNoteHandler } from "./lambda/notes/deleteNote";
 import { updateNoteHandler } from "./lambda/notes/updateNote";
+import { getMeetingsHandler } from "./lambda/meetings/getMeetings";
+import { createMeetingHandler } from "./lambda/meetings/createMeeting";
+import { getInvoicesHandler } from "./lambda/invoices/getInvoices";
+import { getSubscriptionsHandler } from "./lambda/subscriptions/getSubscriptions";
+import { getProductsHandler } from "./lambda/products/getProducts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -281,6 +286,115 @@ app.use(express.json());
 
   app.put("/api/notes/:id", handleUpdateNote);
   app.patch("/api/notes/:id", handleUpdateNote);
+
+  // Meetings endpoints
+  app.get("/api/meetings", async (req, res) => {
+    try {
+      const result = await getMeetingsHandler({
+        httpMethod: "GET",
+        path: "/meetings",
+        headers: req.headers as Record<string, string | undefined>,
+        queryStringParameters: req.query as Record<string, string | undefined>,
+      });
+      let responseData: unknown;
+      try {
+        responseData = JSON.parse(result.body);
+      } catch {
+        responseData = { message: result.body };
+      }
+      return res.status(result.statusCode).json(responseData);
+    } catch (error: any) {
+      console.error("Error fetching meetings:", error);
+      return res.status(500).json({ success: false, error: error?.message || "Internal server error", meetings: [] });
+    }
+  });
+
+  app.post("/api/meetings", async (req, res) => {
+    try {
+      const result = await createMeetingHandler({
+        httpMethod: "POST",
+        path: "/meetings",
+        headers: req.headers as Record<string, string | undefined>,
+        body: typeof req.body === "string" ? req.body : JSON.stringify(req.body),
+      });
+      let responseData: unknown;
+      try {
+        responseData = JSON.parse(result.body);
+      } catch {
+        responseData = { message: result.body };
+      }
+      return res.status(result.statusCode).json(responseData);
+    } catch (error: any) {
+      console.error("Error creating meeting:", error);
+      return res.status(500).json({ success: false, error: error?.message || "Internal server error" });
+    }
+  });
+
+  // Invoices endpoint
+  app.get("/api/invoices", async (req, res) => {
+    try {
+      const result = await getInvoicesHandler({
+        httpMethod: "GET",
+        path: "/invoices",
+        headers: req.headers as Record<string, string | undefined>,
+        queryStringParameters: req.query as Record<string, string | undefined>,
+      });
+      let responseData: unknown;
+      try {
+        responseData = JSON.parse(result.body);
+      } catch {
+        responseData = { message: result.body };
+      }
+      return res.status(result.statusCode).json(responseData);
+    } catch (error: any) {
+      console.error("Error fetching invoices:", error);
+      return res.status(500).json({ success: false, error: error?.message || "Internal server error", invoices: [] });
+    }
+  });
+
+  // Subscriptions endpoint
+  app.get("/api/subscriptions", async (req, res) => {
+    try {
+      const result = await getSubscriptionsHandler({
+        httpMethod: "GET",
+        path: "/subscriptions",
+        headers: req.headers as Record<string, string | undefined>,
+        queryStringParameters: req.query as Record<string, string | undefined>,
+      });
+      let responseData: unknown;
+      try {
+        responseData = JSON.parse(result.body);
+      } catch {
+        responseData = { message: result.body };
+      }
+      return res.status(result.statusCode).json(responseData);
+    } catch (error: any) {
+      console.error("Error fetching subscriptions:", error);
+      return res.status(500).json({ success: false, error: error?.message || "Internal server error", subscriptions: [] });
+    }
+  });
+
+  // Products endpoint
+  app.get("/api/products", async (req, res) => {
+    try {
+      const result = await getProductsHandler({
+        httpMethod: "GET",
+        path: "/products",
+        headers: req.headers as Record<string, string | undefined>,
+        queryStringParameters: req.query as Record<string, string | undefined>,
+      });
+      let responseData: unknown;
+      try {
+        responseData = JSON.parse(result.body);
+      } catch {
+        responseData = { message: result.body };
+      }
+      return res.status(result.statusCode).json(responseData);
+    } catch (error: any) {
+      console.error("Error fetching products:", error);
+      return res.status(500).json({ success: false, error: error?.message || "Internal server error", products: [] });
+    }
+  });
 
 export async function startServer() {
   const server = createServer(app);

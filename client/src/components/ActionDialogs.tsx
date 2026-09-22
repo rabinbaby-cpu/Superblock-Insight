@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { fetchAuthSession } from "aws-amplify/auth";
+import { createCustomerMeeting } from "@/lib/api/meetings";
 
 export interface QuickFormDefaultValues {
   name?: string;
@@ -36,11 +37,15 @@ export function QuickFormDialog({
   const [saving, setSaving] = useState(false);
   const [formName, setFormName] = useState(defaultValues?.name || "");
   const [formContent, setFormContent] = useState(defaultValues?.description || "");
+  const [meetingDate, setMeetingDate] = useState("");
+  const [meetingOwner, setMeetingOwner] = useState("Anika Shah");
 
   useEffect(() => {
     if (open) {
       setFormName(defaultValues?.name || "");
       setFormContent(defaultValues?.description || "");
+      setMeetingDate("");
+      setMeetingOwner("Anika Shah");
     }
   }, [open, defaultValues?.name, defaultValues?.description]);
 
@@ -155,6 +160,63 @@ export function QuickFormDialog({
       return;
     }
 
+    if (type === "meeting") {
+      const targetCustomerId =
+        customerId ||
+        defaultValues?.customerId ||
+        (typeof window !== "undefined"
+          ? window.location.pathname.match(/\/customers\/([^/?#]+)/)?.[1]
+          : undefined);
+
+      if (!targetCustomerId) {
+        toast.error("Customer ID is required to schedule a meeting");
+        return;
+      }
+
+      if (!formName.trim()) {
+        toast.error("Meeting title is required");
+        return;
+      }
+
+      setSaving(true);
+      try {
+        const createdMeeting = await createCustomerMeeting({
+          customerId: targetCustomerId,
+          title: formName.trim(),
+          description: formContent.trim() || undefined,
+          meetingDate: meetingDate || new Date().toISOString().split("T")[0],
+          createdBy: meetingOwner || undefined,
+        });
+
+        toast.success("Meeting scheduled", {
+          description: "Your meeting has been saved to the database.",
+        });
+        setOpen(false);
+        setFormName("");
+        setFormContent("");
+        setMeetingDate("");
+
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("customer-operations-updated", {
+              detail: { customerId: targetCustomerId, meeting: createdMeeting },
+            })
+          );
+          window.dispatchEvent(
+            new CustomEvent("customer-meeting-created", {
+              detail: { customerId: targetCustomerId, meeting: createdMeeting },
+            })
+          );
+        }
+      } catch (err: any) {
+        console.error("Error creating meeting:", err);
+        toast.error(err?.message || "Failed to schedule meeting");
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+
     setSaving(true);
     window.setTimeout(() => {
       setSaving(false);
@@ -175,7 +237,29 @@ export function QuickFormDialog({
         <div className="grid gap-4 py-1">
           <div className="grid gap-1.5"><Label htmlFor={`${title}-name`} className="text-xs">{type === "meeting" ? "Meeting title" : type === "note" ? "Note title" : type === "customer" ? "Company name" : "Name"}</Label><Input id={`${title}-name`} value={formName} onChange={(e) => setFormName(e.target.value)} placeholder={type === "meeting" ? "Q4 strategy review" : type === "note" ? "Add a clear title" : "Enter a name"} /></div>
           {type === "customer" && <div className="grid grid-cols-2 gap-3"><div className="grid gap-1.5"><Label className="text-xs">Contact email</Label><Input type="email" defaultValue={defaultValues?.email} placeholder="owner@company.com" /></div><div className="grid gap-1.5"><Label className="text-xs">Plan</Label><Select defaultValue={defaultValues?.plan || "growth"}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="starter">Starter</SelectItem><SelectItem value="growth">Growth</SelectItem><SelectItem value="advanced">Advanced</SelectItem></SelectContent></Select></div></div>}
-          {type === "meeting" && <div className="grid grid-cols-2 gap-3"><div className="grid gap-1.5"><Label className="text-xs">Date</Label><Input type="date" /></div><div className="grid gap-1.5"><Label className="text-xs">Owner</Label><Select defaultValue="anika"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="anika">Anika Shah</SelectItem><SelectItem value="karan">Karan Mehta</SelectItem><SelectItem value="rishi">Rishi Kapoor</SelectItem></SelectContent></Select></div></div>}
+          {type === "meeting" && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-1.5">
+                <Label className="text-xs">Date</Label>
+                <Input
+                  type="date"
+                  value={meetingDate}
+                  onChange={(e) => setMeetingDate(e.target.value)}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label className="text-xs">Owner</Label>
+                <Select value={meetingOwner} onValueChange={setMeetingOwner}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Anika Shah">Anika Shah</SelectItem>
+                    <SelectItem value="Karan Mehta">Karan Mehta</SelectItem>
+                    <SelectItem value="Rishi Kapoor">Rishi Kapoor</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
           <div className="grid gap-1.5"><Label className="text-xs">{type === "note" ? "Note" : type === "meeting" ? "Discussion summary" : "Description"}</Label><Textarea rows={4} value={formContent} onChange={(e) => setFormContent(e.target.value)} placeholder="Add context for your team…" /></div>
         </div>
         <DialogFooter><Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button><Button onClick={save} disabled={saving}>{saving ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}{saving ? "Saving…" : "Save"}</Button></DialogFooter>

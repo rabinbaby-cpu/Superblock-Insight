@@ -42,6 +42,7 @@ import {
   downloadCsv,
 } from "@/components/dashboard-ui";
 import { CopyButton, QuickFormDialog } from "@/components/ActionDialogs";
+import { getCustomerMeetings, type MeetingRecord } from "@/lib/api/meetings";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -1942,7 +1943,75 @@ function NoteRow({
 
 function Meetings({ customer }: { customer: Customer }) {
   const [completed, setCompleted] = useState<string[]>([]);
-  const meetings = customer.meetings || [];
+  const [dbMeetings, setDbMeetings] = useState<MeetingRecord[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const fetchMeetings = async () => {
+    if (!customer?.id) return;
+    setLoading(true);
+    try {
+      const records = await getCustomerMeetings(customer.id);
+      if (Array.isArray(records)) {
+        setDbMeetings(records);
+      }
+    } catch (err) {
+      console.warn("Could not load real meetings from backend:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchMeetings();
+
+    const handleCreated = (e: Event) => {
+      const detail = (e as CustomEvent)?.detail;
+      if (!detail || detail.customerId === customer.id) {
+        fetchMeetings();
+      }
+    };
+
+    window.addEventListener("customer-meeting-created", handleCreated);
+    window.addEventListener("customer-operations-updated", handleCreated);
+
+    return () => {
+      window.removeEventListener("customer-meeting-created", handleCreated);
+      window.removeEventListener("customer-operations-updated", handleCreated);
+    };
+  }, [customer.id]);
+
+  const meetings = useMemo(() => {
+    if (dbMeetings.length > 0) {
+      return dbMeetings.map((m) => {
+        let dateStr = "—";
+        if (m.meeting_date) {
+          try {
+            dateStr = new Date(m.meeting_date).toLocaleDateString("en-US", {
+              day: "2-digit",
+              month: "short",
+              year: "numeric",
+            });
+          } catch {
+            dateStr = String(m.meeting_date);
+          }
+        }
+        return {
+          id: m.id,
+          title: m.title || "Meeting",
+          status: (m.status || "Scheduled") as any,
+          date: dateStr,
+          owner: m.created_by || "Team Member",
+          summary: m.description || "Discussion recorded.",
+          decisions: "Key details and commitments noted in description.",
+          actionItems: [] as string[],
+          participants: [m.created_by || "Team"],
+          dueDate: dateStr,
+          followUp: "—",
+        };
+      });
+    }
+    return customer.meetings || [];
+  }, [dbMeetings, customer.meetings]);
 
   return (
     <div>
@@ -1955,6 +2024,7 @@ function Meetings({ customer }: { customer: Customer }) {
         </div>
         <QuickFormDialog
           type="meeting"
+          customerId={customer.id}
           title="Add meeting"
           description="Record a meeting and assign follow-up actions."
           trigger={
@@ -1965,7 +2035,11 @@ function Meetings({ customer }: { customer: Customer }) {
           }
         />
       </div>
-      {meetings.length === 0 ? (
+      {loading && meetings.length === 0 ? (
+        <div className="panel flex items-center justify-center p-8 text-xs text-muted-foreground">
+          <Loader2 className="mr-2 size-4 animate-spin" /> Loading meetings…
+        </div>
+      ) : meetings.length === 0 ? (
         <div className="panel flex flex-col items-center justify-center p-12 text-center">
           <CalendarPlus className="mb-3 size-8 text-muted-foreground/40" />
           <h3 className="text-sm font-semibold">No meetings recorded</h3>

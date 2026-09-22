@@ -297,14 +297,7 @@ function vitePluginExpressApi(): Plugin {
     name: "express-api-proxy",
     configureServer(server: ViteDevServer) {
       server.middlewares.use((req, res, next) => {
-        if (
-          req.url?.startsWith("/api/notes") ||
-          req.url?.startsWith("/api/customer-operations") ||
-          req.url?.startsWith("/api/customer-deals") ||
-          req.url?.startsWith("/api/customer-tasks") ||
-          req.url?.startsWith("/api/customer-tickets") ||
-          req.url?.startsWith("/api/customer-contact-groups")
-        ) {
+        if (req.url?.startsWith("/api/")) {
           return expressApp(req, res, next);
         }
         next();
