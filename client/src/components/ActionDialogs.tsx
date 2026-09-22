@@ -83,18 +83,49 @@ export function QuickFormDialog({
           headers["Authorization"] = `Bearer ${token}`;
         }
 
-        const response = await fetch(
-          "https://api.superblock.chat/customeranalyticsdashboard/notes",
-          {
+        const isLocal =
+          typeof window !== "undefined" &&
+          (window.location.hostname === "localhost" ||
+            window.location.hostname === "127.0.0.1");
+
+        const targetUrl = isLocal
+          ? "/api/notes"
+          : "https://api.superblock.chat/customeranalytics?action=create_note";
+
+        const requestBody = {
+          action: "create_note",
+          type: "note",
+          customerId: targetCustomerId,
+          customer_id: targetCustomerId,
+          title: formName.trim() || undefined,
+          content: formContent.trim(),
+        };
+
+        let response: Response;
+        try {
+          response = await fetch(targetUrl, {
             method: "POST",
             headers,
-            body: JSON.stringify({
-              customerId: targetCustomerId,
-              title: formName.trim() || undefined,
-              content: formContent.trim(),
-            }),
+            body: JSON.stringify(requestBody),
+          });
+        } catch (fetchErr: any) {
+          if (!isLocal) {
+            try {
+              response = await fetch(
+                "https://api.superblock.chat/customeranalytics",
+                {
+                  method: "POST",
+                  headers,
+                  body: JSON.stringify(requestBody),
+                }
+              );
+            } catch {
+              throw fetchErr;
+            }
+          } else {
+            throw fetchErr;
           }
-        );
+        }
 
         const data = await response.json().catch(() => null);
 
