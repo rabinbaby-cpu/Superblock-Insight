@@ -90,57 +90,59 @@ export function QuickFormDialog({
 
         const targetUrl = isLocal
           ? "/api/notes"
-          : "https://api.superblock.chat/customeranalytics?action=create_note";
+          : "https://api.superblock.chat/customeranalyticsdashboard/notes";
 
         const requestBody = {
-          action: "create_note",
-          type: "note",
           customerId: targetCustomerId,
           customer_id: targetCustomerId,
           title: formName.trim() || undefined,
           content: formContent.trim(),
         };
 
-        let response: Response;
-        try {
-          response = await fetch(targetUrl, {
-            method: "POST",
-            headers,
-            body: JSON.stringify(requestBody),
-          });
-        } catch (fetchErr: any) {
-          if (!isLocal) {
-            try {
-              response = await fetch(
-                "https://api.superblock.chat/customeranalytics",
-                {
-                  method: "POST",
-                  headers,
-                  body: JSON.stringify(requestBody),
-                }
-              );
-            } catch {
-              throw fetchErr;
-            }
-          } else {
-            throw fetchErr;
-          }
-        }
+        const response = await fetch(targetUrl, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(requestBody),
+        });
 
         const data = await response.json().catch(() => null);
 
-        if (!response.ok || (data && data.success === false)) {
-          throw new Error(data?.error || `Failed to save note (status ${response.status})`);
+        if (!response.ok) {
+          throw new Error(
+            data?.error || `Failed to save note (HTTP ${response.status})`
+          );
+        }
+
+        if (!data || data.success === false) {
+          throw new Error(
+            data?.error || "Backend reported failure saving note"
+          );
+        }
+
+        // Strictly verify that a persisted note was returned by the database INSERT
+        const createdNote = data.note || data.data;
+        if (!createdNote || !createdNote.id) {
+          throw new Error(
+            "Backend failed to persist note to database (no created note returned)"
+          );
         }
 
         toast.success("Note saved", {
           description: "Your note has been saved to the database.",
         });
         setOpen(false);
+        setFormName("");
+        setFormContent("");
+
         if (typeof window !== "undefined") {
           window.dispatchEvent(
             new CustomEvent("customer-operations-updated", {
-              detail: { customerId: targetCustomerId },
+              detail: { customerId: targetCustomerId, note: createdNote },
+            })
+          );
+          window.dispatchEvent(
+            new CustomEvent("customer-note-created", {
+              detail: { customerId: targetCustomerId, note: createdNote },
             })
           );
         }

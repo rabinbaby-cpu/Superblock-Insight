@@ -88,6 +88,7 @@ import {
 } from "@/data/mockData";
 import { useCustomerAnalytics } from "@/lib/api/customerAnalytics";
 import { useCustomerProfile } from "@/lib/api/customerProfile";
+import { fetchAuthSession } from "aws-amplify/auth";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -234,18 +235,68 @@ export default function CustomerDetail() {
     const customerId = rawCustomer.id;
     const customerName = rawCustomer.company || "";
 
-    fetch(
-      `/api/customer-operations?customerId=${encodeURIComponent(customerId)}&customerName=${encodeURIComponent(customerName)}&refresh=true&_t=${Date.now()}`
-    )
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (!cancelled && data?.success) {
-          setRealOperations(data);
+    const isLocal =
+      typeof window !== "undefined" &&
+      (window.location.hostname === "localhost" ||
+        window.location.hostname === "127.0.0.1");
+
+    const fetchOperationsData = async () => {
+      try {
+        if (isLocal) {
+          const res = await fetch(
+            `/api/customer-operations?customerId=${encodeURIComponent(customerId)}&customerName=${encodeURIComponent(customerName)}&refresh=true&_t=${Date.now()}`
+          );
+          if (res.ok) {
+            const data = await res.json();
+            if (!cancelled && data?.success) {
+              setRealOperations(data);
+              return;
+            }
+          }
         }
-      })
-      .catch((err) => {
-        console.error("Failed to fetch customer operations:", err);
-      });
+
+        // On production or if customer-operations fails, fetch official notes API
+        let token = "";
+        try {
+          const session = await fetchAuthSession();
+          token =
+            session?.tokens?.idToken?.toString() ||
+            session?.tokens?.accessToken?.toString() ||
+            "";
+        } catch {
+          // ignore
+        }
+
+        const headers: Record<string, string> = {};
+        if (token) {
+          headers["Authorization"] = `Bearer ${token}`;
+        }
+
+        const notesUrl = isLocal
+          ? `/api/notes?customerId=${encodeURIComponent(customerId)}`
+          : `https://api.superblock.chat/customeranalyticsdashboard/notes?customerId=${encodeURIComponent(customerId)}`;
+
+        const notesRes = await fetch(notesUrl, { headers });
+        if (notesRes.ok) {
+          const notesData = await notesRes.json();
+          if (!cancelled && notesData?.success && Array.isArray(notesData?.notes)) {
+            setRealOperations((prev) => ({
+              activities: prev?.activities || [],
+              products: prev?.products || [],
+              deals: prev?.deals || [],
+              tasks: prev?.tasks || [],
+              tickets: prev?.tickets || [],
+              groups: prev?.groups || [],
+              notes: notesData.notes,
+            } as any));
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch customer operations/notes:", err);
+      }
+    };
+
+    fetchOperationsData();
 
     return () => {
       cancelled = true;
@@ -1438,10 +1489,66 @@ function Notes({ customer }: { customer: Customer }) {
     setNotes(customer.notes || []);
   }, [customer.notes, customer.id]);
 
+  useEffect(() => {
+    const onNoteCreated = (e: Event) => {
+      const detail = (e as CustomEvent)?.detail;
+      if (detail?.note && (detail.customerId === customer.id || !detail.customerId)) {
+        const n = detail.note;
+        const newNote: Note = {
+          id: n.id,
+          title: n.title || "Customer Note",
+          content: n.content || "",
+          category: n.category || "General",
+          priority: (n.priority || "Medium") as "Low" | "Medium" | "High",
+          createdBy: n.created_by || n.createdBy || "You",
+          createdDate: n.created_at
+            ? new Date(n.created_at).toLocaleDateString("en-US", {
+                day: "2-digit",
+                month: "short",
+                year: "numeric",
+              })
+            : "Just now",
+          updatedAt: n.updated_at || n.created_at || "Just now",
+        };
+        setNotes((prev) => [newNote, ...prev.filter((item) => item.id !== newNote.id)]);
+      }
+    };
+    window.addEventListener("customer-note-created", onNoteCreated);
+    return () => {
+      window.removeEventListener("customer-note-created", onNoteCreated);
+    };
+  }, [customer.id]);
+
   const handleDelete = async (noteId: string) => {
     try {
-      const res = await fetch(`/api/notes/${encodeURIComponent(noteId)}`, {
+      const isLocal =
+        typeof window !== "undefined" &&
+        (window.location.hostname === "localhost" ||
+          window.location.hostname === "127.0.0.1");
+
+      let token = "";
+      try {
+        const session = await fetchAuthSession();
+        token =
+          session?.tokens?.idToken?.toString() ||
+          session?.tokens?.accessToken?.toString() ||
+          "";
+      } catch (authErr) {
+        console.warn("Could not retrieve Cognito auth session:", authErr);
+      }
+
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+
+      const url = isLocal
+        ? `/api/notes/${encodeURIComponent(noteId)}`
+        : `https://api.superblock.chat/customeranalyticsdashboard/notes/${encodeURIComponent(noteId)}`;
+
+      const res = await fetch(url, {
         method: "DELETE",
+        headers,
       });
       const data = await res.json().catch(() => null);
       if (!res.ok || (data && data.success === false)) {
@@ -1468,11 +1575,36 @@ function Notes({ customer }: { customer: Customer }) {
 
   const handleUpdate = async (noteId: string, title: string, content: string) => {
     try {
-      const res = await fetch(`/api/notes/${encodeURIComponent(noteId)}`, {
+      const isLocal =
+        typeof window !== "undefined" &&
+        (window.location.hostname === "localhost" ||
+          window.location.hostname === "127.0.0.1");
+
+      let token = "";
+      try {
+        const session = await fetchAuthSession();
+        token =
+          session?.tokens?.idToken?.toString() ||
+          session?.tokens?.accessToken?.toString() ||
+          "";
+      } catch (authErr) {
+        console.warn("Could not retrieve Cognito auth session:", authErr);
+      }
+
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+
+      const url = isLocal
+        ? `/api/notes/${encodeURIComponent(noteId)}`
+        : `https://api.superblock.chat/customeranalyticsdashboard/notes/${encodeURIComponent(noteId)}`;
+
+      const res = await fetch(url, {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers,
         body: JSON.stringify({
           title: title.trim() || undefined,
           content: content.trim(),
