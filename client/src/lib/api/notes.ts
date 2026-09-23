@@ -33,7 +33,7 @@ const PRODUCTION_CUSTOMER_BASE =
 
 // Dashboard base
 const PRODUCTION_DASHBOARD_BASE =
-  "https://api.superblock.chat/customeranalyticsdashboard";
+  "https://api.superblock.chat/customeranalyticsdashaboard";
 
 function isLocalhost(): boolean {
   if (typeof window === "undefined") return false;
@@ -102,7 +102,7 @@ export async function getCustomerNotes(
     return Array.isArray(data?.notes) ? data.notes : [];
   }
 
-  // Production: Primary target is official customeranalyticsdashboard/notes
+  // Production Strategy 1: Path-based on customeranalyticsdashaboard/notes
   try {
     const dashboardUrl = `${PRODUCTION_DASHBOARD_BASE}/notes?customerId=${encodeURIComponent(customerId)}`;
     const res = await fetch(dashboardUrl, { method: "GET", headers });
@@ -113,10 +113,24 @@ export async function getCustomerNotes(
       }
     }
   } catch (err) {
-    console.warn("Direct fetch from customeranalyticsdashboard/notes failed, attempting fallback:", err);
+    console.warn("Direct fetch from customeranalyticsdashaboard/notes failed, attempting action param fallback:", err);
   }
 
-  // Fallback to customeranalytics?action=notes
+  // Production Strategy 2: Query-based on customeranalyticsdashaboard?action=notes
+  try {
+    const actionUrl = `${PRODUCTION_DASHBOARD_BASE}?action=notes&customerId=${encodeURIComponent(customerId)}`;
+    const res = await fetch(actionUrl, { method: "GET", headers });
+    if (res.ok) {
+      const data = (await res.json().catch(() => null)) as GetNotesResponse | null;
+      if (data?.success && Array.isArray(data?.notes)) {
+        return data.notes;
+      }
+    }
+  } catch (err) {
+    console.warn("Fetch from customeranalyticsdashaboard?action=notes failed, attempting customeranalytics fallback:", err);
+  }
+
+  // Production Strategy 3: Fallback to customeranalytics?action=notes
   const customerApiUrl = `${PRODUCTION_CUSTOMER_BASE}?action=notes&customerId=${encodeURIComponent(customerId)}`;
   const res = await fetch(customerApiUrl, { method: "GET", headers });
 
@@ -173,7 +187,7 @@ export async function createCustomerNote(input: {
     return data.note;
   }
 
-  // Production: Primary target is official customeranalyticsdashboard/notes
+  // Production Strategy 1: Primary target is official customeranalyticsdashaboard/notes
   try {
     const dashboardUrl = `${PRODUCTION_DASHBOARD_BASE}/notes`;
     const res = await fetch(dashboardUrl, {
@@ -186,10 +200,26 @@ export async function createCustomerNote(input: {
       return data.note;
     }
   } catch (err) {
-    console.warn("POST to customeranalyticsdashboard/notes failed, attempting fallback:", err);
+    console.warn("POST to customeranalyticsdashaboard/notes failed, attempting action param fallback:", err);
   }
 
-  // Fallback to customeranalytics?action=create_note
+  // Production Strategy 2: Root endpoint with action parameter
+  try {
+    const actionUrl = `${PRODUCTION_DASHBOARD_BASE}?action=create_note`;
+    const res = await fetch(actionUrl, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload),
+    });
+    const data = (await res.json().catch(() => null)) as MutateNoteResponse | null;
+    if (res.ok && data?.success && data?.note) {
+      return data.note;
+    }
+  } catch (err) {
+    console.warn("POST to customeranalyticsdashaboard?action=create_note failed, attempting customeranalytics fallback:", err);
+  }
+
+  // Production Strategy 3: Fallback to customeranalytics?action=create_note
   const customerApiUrl = `${PRODUCTION_CUSTOMER_BASE}?action=create_note`;
   const res = await fetch(customerApiUrl, {
     method: "POST",
@@ -242,7 +272,7 @@ export async function updateCustomerNote(
     return data.note;
   }
 
-  // Production: Primary target is official customeranalyticsdashboard/notes/:id
+  // Production Strategy 1: Primary target is official customeranalyticsdashaboard/notes/:id
   try {
     const dashboardUrl = `${PRODUCTION_DASHBOARD_BASE}/notes/${encodeURIComponent(noteId)}`;
     const res = await fetch(dashboardUrl, {
@@ -255,10 +285,26 @@ export async function updateCustomerNote(
       return data.note;
     }
   } catch (err) {
-    console.warn("PUT to customeranalyticsdashboard/notes failed, attempting fallback:", err);
+    console.warn("PUT to customeranalyticsdashaboard/notes failed, attempting action fallback:", err);
   }
 
-  // Fallback to customeranalytics with action=update_note
+  // Production Strategy 2: Action parameter on root customeranalyticsdashaboard
+  try {
+    const actionUrl = `${PRODUCTION_DASHBOARD_BASE}?action=update_note&id=${encodeURIComponent(noteId)}`;
+    const res = await fetch(actionUrl, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload),
+    });
+    const data = (await res.json().catch(() => null)) as MutateNoteResponse | null;
+    if (res.ok && data?.success && data?.note) {
+      return data.note;
+    }
+  } catch (err) {
+    console.warn("POST to customeranalyticsdashaboard?action=update_note failed, attempting customeranalytics fallback:", err);
+  }
+
+  // Production Strategy 3: Fallback to customeranalytics with action=update_note
   const customerApiUrl = `${PRODUCTION_CUSTOMER_BASE}?action=update_note&id=${encodeURIComponent(noteId)}`;
   const res = await fetch(customerApiUrl, {
     method: "POST",
@@ -298,7 +344,7 @@ export async function deleteCustomerNote(noteId: string): Promise<boolean> {
     return true;
   }
 
-  // Production: Primary target is official customeranalyticsdashboard/notes/:id
+  // Production Strategy 1: Primary target is official customeranalyticsdashaboard/notes/:id
   try {
     const dashboardUrl = `${PRODUCTION_DASHBOARD_BASE}/notes/${encodeURIComponent(noteId)}`;
     const res = await fetch(dashboardUrl, {
@@ -310,10 +356,26 @@ export async function deleteCustomerNote(noteId: string): Promise<boolean> {
       return true;
     }
   } catch (err) {
-    console.warn("DELETE to customeranalyticsdashboard/notes failed, attempting fallback:", err);
+    console.warn("DELETE to customeranalyticsdashaboard/notes failed, attempting action fallback:", err);
   }
 
-  // Fallback to customeranalytics with action=delete_note
+  // Production Strategy 2: Action parameter on root customeranalyticsdashaboard
+  try {
+    const actionUrl = `${PRODUCTION_DASHBOARD_BASE}?action=delete_note&id=${encodeURIComponent(noteId)}`;
+    const res = await fetch(actionUrl, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ action: "delete_note", id: noteId }),
+    });
+    const data = (await res.json().catch(() => null)) as MutateNoteResponse | null;
+    if (res.ok && data?.success) {
+      return true;
+    }
+  } catch (err) {
+    console.warn("POST to customeranalyticsdashaboard?action=delete_note failed, attempting customeranalytics fallback:", err);
+  }
+
+  // Production Strategy 3: Fallback to customeranalytics with action=delete_note
   const customerApiUrl = `${PRODUCTION_CUSTOMER_BASE}?action=delete_note&id=${encodeURIComponent(noteId)}`;
   const res = await fetch(customerApiUrl, {
     method: "POST",

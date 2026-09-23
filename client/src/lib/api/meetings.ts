@@ -32,7 +32,7 @@ const PRODUCTION_CUSTOMER_BASE =
   "https://api.superblock.chat/customeranalytics";
 
 const PRODUCTION_DASHBOARD_BASE =
-  "https://api.superblock.chat/customeranalyticsdashboard";
+  "https://api.superblock.chat/customeranalyticsdashaboard";
 
 async function authHeaders(): Promise<Record<string, string>> {
   const headers: Record<string, string> = {
@@ -90,7 +90,7 @@ export async function getCustomerMeetings(
     return Array.isArray(data.meetings) ? data.meetings : [];
   }
 
-  // Production: Primary target is official customeranalyticsdashboard/meetings
+  // Production Strategy 1: Path-based on customeranalyticsdashaboard/meetings
   try {
     const dashboardUrl = `${PRODUCTION_DASHBOARD_BASE}/meetings?customerId=${encodeURIComponent(customerId)}`;
     const response = await fetch(dashboardUrl, { method: "GET", headers });
@@ -101,10 +101,24 @@ export async function getCustomerMeetings(
       }
     }
   } catch (err) {
-    console.warn("Direct fetch from customeranalyticsdashboard/meetings failed, attempting fallback:", err);
+    console.warn("Direct fetch from customeranalyticsdashaboard/meetings failed, attempting action param fallback:", err);
   }
 
-  // Fallback to customeranalytics?action=meetings
+  // Production Strategy 2: Action param on customeranalyticsdashaboard?action=meetings
+  try {
+    const actionUrl = `${PRODUCTION_DASHBOARD_BASE}?action=meetings&customerId=${encodeURIComponent(customerId)}`;
+    const response = await fetch(actionUrl, { method: "GET", headers });
+    if (response.ok) {
+      const data = (await response.json().catch(() => null)) as MeetingsResponse | null;
+      if (data?.success && Array.isArray(data.meetings)) {
+        return data.meetings;
+      }
+    }
+  } catch (err) {
+    console.warn("Fetch from customeranalyticsdashaboard?action=meetings failed, attempting customeranalytics fallback:", err);
+  }
+
+  // Production Strategy 3: Fallback to customeranalytics?action=meetings
   const customerApiUrl = `${PRODUCTION_CUSTOMER_BASE}?action=meetings&customerId=${encodeURIComponent(customerId)}`;
   const response = await fetch(customerApiUrl, { method: "GET", headers });
   const data = (await response.json().catch(() => null)) as MeetingsResponse | null;
@@ -160,7 +174,7 @@ export async function createCustomerMeeting(input: {
     return data.meeting;
   }
 
-  // Production: Primary target is official customeranalyticsdashboard/meetings
+  // Production Strategy 1: Path-based on customeranalyticsdashaboard/meetings
   try {
     const response = await fetch(`${PRODUCTION_DASHBOARD_BASE}/meetings`, {
       method: "POST",
@@ -172,10 +186,26 @@ export async function createCustomerMeeting(input: {
       return data.meeting;
     }
   } catch (err) {
-    console.warn("POST to customeranalyticsdashboard/meetings failed, attempting fallback:", err);
+    console.warn("POST to customeranalyticsdashaboard/meetings failed, attempting action fallback:", err);
   }
 
-  // Fallback to customeranalytics with action=create_meeting
+  // Production Strategy 2: Action parameter on root customeranalyticsdashaboard
+  try {
+    const actionUrl = `${PRODUCTION_DASHBOARD_BASE}?action=create_meeting`;
+    const response = await fetch(actionUrl, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload),
+    });
+    const data = (await response.json().catch(() => null)) as CreateMeetingResponse | null;
+    if (response.ok && data?.success && data.meeting) {
+      return data.meeting;
+    }
+  } catch (err) {
+    console.warn("POST to customeranalyticsdashaboard?action=create_meeting failed, attempting customeranalytics fallback:", err);
+  }
+
+  // Production Strategy 3: Fallback to customeranalytics with action=create_meeting
   const customerApiUrl = `${PRODUCTION_CUSTOMER_BASE}?action=create_meeting`;
   const response = await fetch(customerApiUrl, {
     method: "POST",

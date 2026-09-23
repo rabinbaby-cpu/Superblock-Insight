@@ -1,8 +1,4 @@
 import { Pool, type QueryResult, type QueryResultRow } from "pg";
-import {
-  SecretsManagerClient,
-  GetSecretValueCommand,
-} from "@aws-sdk/client-secrets-manager";
 
 let cachedPool: Pool | null = null;
 let cachedCredentials: { username?: string; password?: string } | null = null;
@@ -24,34 +20,39 @@ async function getDbCredentials(): Promise<{ username: string; password: string 
   const secretArn = process.env.DB_SECRET_ARN;
 
   if (secretArn) {
-    const client = new SecretsManagerClient({ region: REGION });
-    const command = new GetSecretValueCommand({ SecretId: secretArn });
-    const response = await client.send(command);
-
-    if (!response.SecretString) {
-      throw new Error(`SecretString is empty for ARN: ${secretArn}`);
-    }
-
     try {
-      const parsed = JSON.parse(response.SecretString);
-      cachedCredentials = {
-        username: parsed.username || parsed.user || "superblockhq",
-        password: parsed.password || "",
-      };
-      return {
-        username: cachedCredentials.username!,
-        password: cachedCredentials.password!,
-      };
-    } catch {
-      // If secret is plain text password rather than JSON
-      cachedCredentials = {
-        username: process.env.DB_USER || "superblockhq",
-        password: response.SecretString,
-      };
-      return {
-        username: cachedCredentials.username!,
-        password: cachedCredentials.password!,
-      };
+      const { SecretsManagerClient, GetSecretValueCommand } = await import(
+        "@aws-sdk/client-secrets-manager"
+      );
+      const client = new SecretsManagerClient({ region: REGION });
+      const command = new GetSecretValueCommand({ SecretId: secretArn });
+      const response = await client.send(command);
+
+      if (response.SecretString) {
+        try {
+          const parsed = JSON.parse(response.SecretString);
+          cachedCredentials = {
+            username: parsed.username || parsed.user || "superblockhq",
+            password: parsed.password || "",
+          };
+          return {
+            username: cachedCredentials.username!,
+            password: cachedCredentials.password!,
+          };
+        } catch {
+          // If secret is plain text password rather than JSON
+          cachedCredentials = {
+            username: process.env.DB_USER || "superblockhq",
+            password: response.SecretString,
+          };
+          return {
+            username: cachedCredentials.username!,
+            password: cachedCredentials.password!,
+          };
+        }
+      }
+    } catch (err: any) {
+      console.warn("Could not retrieve secret from Secrets Manager:", err?.message || err);
     }
   }
 
@@ -132,7 +133,10 @@ export async function getPool(): Promise<Pool> {
   const creds = await getDbCredentials();
 
   const host = process.env.DB_HOST || "127.0.0.1";
-  const port = parseInt(process.env.DB_PORT || "5433", 10);
+  const port = parseInt(
+    process.env.DB_PORT || (process.env.AWS_EXECUTION_ENV ? "5432" : "5433"),
+    10
+  );
   const database = process.env.DB_NAME || "superblockhq";
 
   // Small connection pool configuration for serverless Lambda execution

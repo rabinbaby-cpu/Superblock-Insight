@@ -64,7 +64,7 @@ const PRODUCTION_CUSTOMER_BASE =
   "https://api.superblock.chat/customeranalytics";
 
 const PRODUCTION_DASHBOARD_BASE =
-  "https://api.superblock.chat/customeranalyticsdashboard";
+  "https://api.superblock.chat/customeranalyticsdashaboard";
 
 function isLocalhost(): boolean {
   if (typeof window === "undefined") return false;
@@ -126,7 +126,7 @@ export async function getCustomerInvoices(
     return Array.isArray(data.invoices) ? data.invoices : [];
   }
 
-  // Production: Primary target is official customeranalyticsdashboard/invoices
+  // Production Strategy 1: Path-based on customeranalyticsdashaboard/invoices
   try {
     const dashboardUrl = `${PRODUCTION_DASHBOARD_BASE}/invoices?customerId=${encoded}`;
     const response = await fetch(dashboardUrl, {
@@ -140,10 +140,24 @@ export async function getCustomerInvoices(
       }
     }
   } catch (err) {
-    console.warn("Direct fetch from customeranalyticsdashboard/invoices failed, attempting fallback:", err);
+    console.warn("Direct fetch from customeranalyticsdashaboard/invoices failed, attempting action param fallback:", err);
   }
 
-  // Fallback to customeranalytics?action=invoices
+  // Production Strategy 2: Action parameter on customeranalyticsdashaboard?action=invoices
+  try {
+    const actionUrl = `${PRODUCTION_DASHBOARD_BASE}?action=invoices&customerId=${encoded}`;
+    const response = await fetch(actionUrl, { method: "GET", headers });
+    if (response.ok) {
+      const data = (await response.json().catch(() => null)) as InvoicesResponse | null;
+      if (data?.success && Array.isArray(data.invoices)) {
+        return data.invoices;
+      }
+    }
+  } catch (err) {
+    console.warn("Fetch from customeranalyticsdashaboard?action=invoices failed, attempting customeranalytics fallback:", err);
+  }
+
+  // Production Strategy 3: Fallback to customeranalytics?action=invoices
   const customerApiUrl = `${PRODUCTION_CUSTOMER_BASE}?action=invoices&customerId=${encoded}`;
   const response = await fetch(customerApiUrl, { method: "GET", headers });
   const data = (await response.json().catch(() => null)) as InvoicesResponse | null;
@@ -178,7 +192,7 @@ export async function getCustomerSubscriptions(
     return Array.isArray(data.subscriptions) ? data.subscriptions : [];
   }
 
-  // Production: Primary target is official customeranalyticsdashboard/subscriptions
+  // Production Strategy 1: Path-based on customeranalyticsdashaboard/subscriptions
   try {
     const dashboardUrl = `${PRODUCTION_DASHBOARD_BASE}/subscriptions?customerId=${encoded}`;
     const response = await fetch(dashboardUrl, {
@@ -192,10 +206,24 @@ export async function getCustomerSubscriptions(
       }
     }
   } catch (err) {
-    console.warn("Direct fetch from customeranalyticsdashboard/subscriptions failed, attempting fallback:", err);
+    console.warn("Direct fetch from customeranalyticsdashaboard/subscriptions failed, attempting action param fallback:", err);
   }
 
-  // Fallback to customeranalytics?action=subscriptions
+  // Production Strategy 2: Action parameter on customeranalyticsdashaboard?action=subscriptions
+  try {
+    const actionUrl = `${PRODUCTION_DASHBOARD_BASE}?action=subscriptions&customerId=${encoded}`;
+    const response = await fetch(actionUrl, { method: "GET", headers });
+    if (response.ok) {
+      const data = (await response.json().catch(() => null)) as SubscriptionsResponse | null;
+      if (data?.success && Array.isArray(data.subscriptions)) {
+        return data.subscriptions;
+      }
+    }
+  } catch (err) {
+    console.warn("Fetch from customeranalyticsdashaboard?action=subscriptions failed, attempting customeranalytics fallback:", err);
+  }
+
+  // Production Strategy 3: Fallback to customeranalytics?action=subscriptions
   const customerApiUrl = `${PRODUCTION_CUSTOMER_BASE}?action=subscriptions&customerId=${encoded}`;
   const response = await fetch(customerApiUrl, { method: "GET", headers });
   const data = (await response.json().catch(() => null)) as SubscriptionsResponse | null;
@@ -225,7 +253,7 @@ export async function getBillingProducts(): Promise<ProductRecord[]> {
     return Array.isArray(data.products) ? data.products : [];
   }
 
-  // Production: Primary target is official customeranalyticsdashboard/products
+  // Production Strategy 1: Path-based on customeranalyticsdashaboard/products
   try {
     const dashboardUrl = `${PRODUCTION_DASHBOARD_BASE}/products`;
     const response = await fetch(dashboardUrl, {
@@ -239,10 +267,24 @@ export async function getBillingProducts(): Promise<ProductRecord[]> {
       }
     }
   } catch (err) {
-    console.warn("Direct fetch from customeranalyticsdashboard/products failed, attempting fallback:", err);
+    console.warn("Direct fetch from customeranalyticsdashaboard/products failed, attempting action param fallback:", err);
   }
 
-  // Fallback to customeranalytics?action=products
+  // Production Strategy 2: Action parameter on customeranalyticsdashaboard?action=products
+  try {
+    const actionUrl = `${PRODUCTION_DASHBOARD_BASE}?action=products`;
+    const response = await fetch(actionUrl, { method: "GET", headers });
+    if (response.ok) {
+      const data = (await response.json().catch(() => null)) as ProductsResponse | null;
+      if (data?.success && Array.isArray(data.products)) {
+        return data.products;
+      }
+    }
+  } catch (err) {
+    console.warn("Fetch from customeranalyticsdashaboard?action=products failed, attempting customeranalytics fallback:", err);
+  }
+
+  // Production Strategy 3: Fallback to customeranalytics?action=products
   const customerApiUrl = `${PRODUCTION_CUSTOMER_BASE}?action=products`;
   const response = await fetch(customerApiUrl, { method: "GET", headers });
   const data = (await response.json().catch(() => null)) as ProductsResponse | null;
