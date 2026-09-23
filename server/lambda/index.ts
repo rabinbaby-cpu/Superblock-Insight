@@ -9,6 +9,8 @@ import {
 } from "./customerDetails/getCustomerDetails";
 import { getMeetingsHandler } from "./meetings/getMeetings";
 import { createMeetingHandler } from "./meetings/createMeeting";
+import { deleteMeetingHandler } from "./meetings/deleteMeeting";
+import { updateMeetingHandler } from "./meetings/updateMeeting";
 import { getContactsHandler } from "./contacts/getContacts";
 import { createContactHandler } from "./contacts/createContact";
 import { getDealsHandler } from "./deals/getDeals";
@@ -42,6 +44,8 @@ export {
 } from "./customerDetails/getCustomerDetails";
 export { getMeetingsHandler } from "./meetings/getMeetings";
 export { createMeetingHandler } from "./meetings/createMeeting";
+export { deleteMeetingHandler } from "./meetings/deleteMeeting";
+export { updateMeetingHandler } from "./meetings/updateMeeting";
 export { getContactsHandler } from "./contacts/getContacts";
 export { createContactHandler } from "./contacts/createContact";
 export { getDealsHandler } from "./deals/getDeals";
@@ -203,6 +207,18 @@ export async function handler(
       (method === "POST" && (action === "meetings" || action === "create_meeting"))
     ) {
       return await createMeetingHandler(event);
+    }
+    if (
+      (method === "DELETE" && (rawPath.includes("/meetings/") || rawPath.endsWith("/meetings"))) ||
+      (method === "DELETE" && (action === "delete_meeting" || action === "meetings"))
+    ) {
+      return await deleteMeetingHandler(event);
+    }
+    if (
+      ((method === "PUT" || method === "PATCH") && (rawPath.includes("/meetings/") || rawPath.endsWith("/meetings"))) ||
+      ((method === "PUT" || method === "PATCH") && (action === "update_meeting" || action === "meetings"))
+    ) {
+      return await updateMeetingHandler(event);
     }
 
     // 4. Contacts API

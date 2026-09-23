@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "wouter";
 import {
   Area,
@@ -43,14 +43,23 @@ import {
 } from "@/components/dashboard-ui";
 import { CopyButton, QuickFormDialog } from "@/components/ActionDialogs";
 import { Button } from "@/components/ui/button";
-import { getCustomerMeetings, type MeetingRecord } from "@/lib/api/meetings";
+import {
+  getCustomerMeetings,
+  createCustomerMeeting,
+  updateCustomerMeeting,
+  deleteCustomerMeeting,
+  type MeetingRecord,
+} from "@/lib/api/meetings";
 import {
   getCustomerNotes,
+  createCustomerNote,
   updateCustomerNote,
   deleteCustomerNote,
+  type NoteRecord,
 } from "@/lib/api/notes";
 import {
   getCustomerInvoices,
+  createCustomerInvoice,
   getCustomerSubscriptions,
   type InvoiceRecord,
   type SubscriptionRecord,
@@ -254,35 +263,44 @@ export default function CustomerDetail() {
 
     const fetchOperationsData = async () => {
       try {
+        let opsData: any = null;
         if (isLocal) {
-          const res = await fetch(
-            `/api/customer-operations?customerId=${encodeURIComponent(customerId)}&customerName=${encodeURIComponent(customerName)}&refresh=true&_t=${Date.now()}`
-          );
-          if (res.ok) {
-            const data = await res.json();
-            if (!cancelled && data?.success) {
-              setRealOperations(data);
-              return;
+          try {
+            const res = await fetch(
+              `/api/customer-operations?customerId=${encodeURIComponent(customerId)}&customerName=${encodeURIComponent(customerName)}&refresh=true&_t=${Date.now()}`
+            );
+            if (res.ok) {
+              const data = await res.json();
+              if (data?.success) {
+                opsData = data;
+              }
             }
+          } catch (err) {
+            console.warn("Could not fetch customer operations locally:", err);
           }
         }
 
-        // Fetch official notes using Cognito access token & customeranalyticsdashboard/notes
+        // Fetch official notes using database API / customeranalyticsdashaboard
+        let notesData: any[] = [];
         try {
           const notes = await getCustomerNotes(customerId);
-          if (!cancelled && Array.isArray(notes)) {
-            setRealOperations((prev) => ({
-              activities: prev?.activities || [],
-              products: prev?.products || [],
-              deals: prev?.deals || [],
-              tasks: prev?.tasks || [],
-              tickets: prev?.tickets || [],
-              groups: prev?.groups || [],
-              notes: notes,
-            } as any));
+          if (Array.isArray(notes)) {
+            notesData = notes;
           }
         } catch (notesErr) {
-          console.warn("Could not fetch notes from customeranalyticsdashboard:", notesErr);
+          console.warn("Could not fetch notes from notes API:", notesErr);
+        }
+
+        if (!cancelled) {
+          setRealOperations((prev) => ({
+            activities: opsData?.activities || prev?.activities || [],
+            products: opsData?.products || prev?.products || [],
+            deals: opsData?.deals || prev?.deals || [],
+            tasks: opsData?.tasks || prev?.tasks || [],
+            tickets: opsData?.tickets || prev?.tickets || [],
+            groups: opsData?.groups || prev?.groups || [],
+            notes: notesData.length > 0 ? notesData : ((opsData as any)?.notes || (prev as any)?.notes || []),
+          } as any));
         }
       } catch (err) {
         console.error("Failed to fetch customer operations/notes:", err);
@@ -454,11 +472,23 @@ export default function CustomerDetail() {
         id: n.id,
         title: n.title || "Customer Note",
         content: n.content || "",
-        category: "General",
-        priority: "Medium" as const,
-        createdBy: n.createdBy || "Team Member",
-        createdDate: n.createdDate || "—",
-        updatedAt: n.updatedAt || n.createdDate || "—",
+        category: n.category || "General",
+        priority: (n.priority || "Medium") as "Low" | "Medium" | "High",
+        createdBy: n.created_by || n.createdBy || "Team Member",
+        createdDate: n.created_at
+          ? new Date(n.created_at).toLocaleDateString("en-US", {
+              day: "2-digit",
+              month: "short",
+              year: "numeric",
+            })
+          : (n.createdDate || "—"),
+        updatedAt: n.updated_at
+          ? new Date(n.updated_at).toLocaleDateString("en-US", {
+              day: "2-digit",
+              month: "short",
+              year: "numeric",
+            })
+          : (n.updatedAt || n.createdDate || "—"),
       }));
 
       const combinedNotes = [...dbNotes, ...taskNotes, ...ticketNotes];
@@ -669,6 +699,7 @@ export default function CustomerDetail() {
         <div className="flex flex-wrap items-center gap-2 lg:justify-end">
           <QuickFormDialog
             type="note"
+            customerId={customer.id}
             title="Add note"
             description={`Add internal context for ${customer.company}.`}
             trigger={
@@ -680,6 +711,7 @@ export default function CustomerDetail() {
           />
           <QuickFormDialog
             type="meeting"
+            customerId={customer.id}
             title="Add meeting"
             description={`Record a new customer meeting for ${customer.company}.`}
             trigger={
@@ -1474,48 +1506,86 @@ function Offerings({
 }
 
 function Notes({ customer }: { customer: Customer }) {
-  const [notes, setNotes] = useState<Note[]>(customer.notes || []);
+  const [dbNotes, setDbNotes] = useState<NoteRecord[]>([]);
+  const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("All categories");
 
-  useEffect(() => {
-    setNotes(customer.notes || []);
-  }, [customer.notes, customer.id]);
+  const fetchNotes = useCallback(async () => {
+    if (!customer?.id) return;
+    setLoading(true);
+    try {
+      const records = await getCustomerNotes(customer.id);
+      if (Array.isArray(records)) {
+        setDbNotes(records);
+      }
+    } catch (err) {
+      console.warn("Could not load real notes from backend:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [customer?.id]);
 
   useEffect(() => {
-    const onNoteCreated = (e: Event) => {
+    fetchNotes();
+
+    const onNoteUpdated = (e: Event) => {
       const detail = (e as CustomEvent)?.detail;
-      if (detail?.note && (detail.customerId === customer.id || !detail.customerId)) {
-        const n = detail.note;
-        const newNote: Note = {
-          id: n.id,
-          title: n.title || "Customer Note",
-          content: n.content || "",
-          category: n.category || "General",
-          priority: (n.priority || "Medium") as "Low" | "Medium" | "High",
-          createdBy: n.created_by || n.createdBy || "You",
-          createdDate: n.created_at
-            ? new Date(n.created_at).toLocaleDateString("en-US", {
-                day: "2-digit",
-                month: "short",
-                year: "numeric",
-              })
-            : "Just now",
-          updatedAt: n.updated_at || n.created_at || "Just now",
-        };
-        setNotes((prev) => [newNote, ...prev.filter((item) => item.id !== newNote.id)]);
+      if (!detail || detail.customerId === customer.id) {
+        fetchNotes();
       }
     };
-    window.addEventListener("customer-note-created", onNoteCreated);
+    window.addEventListener("customer-note-created", onNoteUpdated);
+    window.addEventListener("customer-operations-updated", onNoteUpdated);
+
     return () => {
-      window.removeEventListener("customer-note-created", onNoteCreated);
+      window.removeEventListener("customer-note-created", onNoteUpdated);
+      window.removeEventListener("customer-operations-updated", onNoteUpdated);
     };
-  }, [customer.id]);
+  }, [fetchNotes, customer.id]);
+
+  const notes: Note[] = useMemo(() => {
+    const realList: Note[] = dbNotes.map((n) => ({
+      id: n.id,
+      title: n.title || "Customer Note",
+      content: n.content || "",
+      category: "General",
+      priority: "Medium",
+      createdBy: n.created_by || "Team Member",
+      createdDate: n.created_at
+        ? new Date(n.created_at).toLocaleDateString("en-US", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+          })
+        : "—",
+      updatedAt: n.updated_at
+        ? new Date(n.updated_at).toLocaleDateString("en-US", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+          })
+        : (n.created_at ? new Date(n.created_at).toLocaleDateString("en-US", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+          }) : "—"),
+    }));
+
+    if (realList.length > 0) {
+      const taskTicketNotes = (customer.notes || []).filter(
+        (cn) => cn.category === "Technical" || cn.category === "Support"
+      );
+      return [...realList, ...taskTicketNotes];
+    }
+
+    return customer.notes || [];
+  }, [dbNotes, customer.notes]);
 
   const handleDelete = async (noteId: string) => {
     try {
       await deleteCustomerNote(noteId);
-      setNotes((prev) => prev.filter((item) => item.id !== noteId));
+      setDbNotes((prev) => prev.filter((item) => item.id !== noteId));
       toast.success("Note deleted", {
         description: "The note has been removed from the database.",
       });
@@ -1537,18 +1607,14 @@ function Notes({ customer }: { customer: Customer }) {
   const handleUpdate = async (noteId: string, title: string, content: string) => {
     try {
       const updatedNoteRecord = await updateCustomerNote(noteId, { title, content });
-      setNotes((prev) =>
+      setDbNotes((prev) =>
         prev.map((item) =>
           item.id === noteId
             ? {
                 ...item,
                 title: updatedNoteRecord?.title ?? title,
                 content: updatedNoteRecord?.content ?? content,
-                updatedAt: new Date().toLocaleDateString("en-US", {
-                  day: "2-digit",
-                  month: "short",
-                  year: "numeric",
-                }),
+                updated_at: new Date().toISOString(),
               }
             : item
         )
@@ -1588,6 +1654,7 @@ function Notes({ customer }: { customer: Customer }) {
         </div>
         <QuickFormDialog
           type="note"
+          customerId={customer.id}
           title="Add note"
           description="Document customer context for internal teams."
           trigger={
@@ -1863,11 +1930,10 @@ function NoteRow({
 }
 
 function Meetings({ customer }: { customer: Customer }) {
-  const [completed, setCompleted] = useState<string[]>([]);
   const [dbMeetings, setDbMeetings] = useState<MeetingRecord[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const fetchMeetings = async () => {
+  const fetchMeetings = useCallback(async () => {
     if (!customer?.id) return;
     setLoading(true);
     try {
@@ -1880,7 +1946,7 @@ function Meetings({ customer }: { customer: Customer }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [customer?.id]);
 
   useEffect(() => {
     fetchMeetings();
@@ -1899,7 +1965,54 @@ function Meetings({ customer }: { customer: Customer }) {
       window.removeEventListener("customer-meeting-created", handleCreated);
       window.removeEventListener("customer-operations-updated", handleCreated);
     };
-  }, [customer.id]);
+  }, [fetchMeetings, customer.id]);
+
+  const handleUpdate = async (
+    meetingId: string,
+    updates: { title?: string; description?: string; meetingDate?: string; status?: string }
+  ) => {
+    try {
+      await updateCustomerMeeting(meetingId, updates);
+      setDbMeetings((prev) =>
+        prev.map((m) =>
+          m.id === meetingId
+            ? {
+                ...m,
+                title: updates.title ?? m.title,
+                description: updates.description ?? m.description,
+                meeting_date: updates.meetingDate ?? m.meeting_date,
+                status: updates.status ?? m.status,
+              }
+            : m
+        )
+      );
+      toast.success("Meeting updated", {
+        description: "Your meeting changes have been saved.",
+      });
+      fetchMeetings();
+      return true;
+    } catch (err: any) {
+      console.error("Error updating meeting:", err);
+      toast.error(err?.message || "Failed to update meeting");
+      return false;
+    }
+  };
+
+  const handleDelete = async (meetingId: string) => {
+    try {
+      await deleteCustomerMeeting(meetingId);
+      setDbMeetings((prev) => prev.filter((m) => m.id !== meetingId));
+      toast.success("Meeting deleted", {
+        description: "The meeting has been removed from the database.",
+      });
+      fetchMeetings();
+      return true;
+    } catch (err: any) {
+      console.error("Error deleting meeting:", err);
+      toast.error(err?.message || "Failed to delete meeting");
+      return false;
+    }
+  };
 
   const meetings = useMemo(() => {
     if (dbMeetings.length > 0) {
@@ -1921,6 +2034,7 @@ function Meetings({ customer }: { customer: Customer }) {
           title: m.title || "Meeting",
           status: (m.status || "Scheduled") as any,
           date: dateStr,
+          rawDate: m.meeting_date || "",
           owner: m.created_by || "Team Member",
           summary: m.description || "Discussion recorded.",
           decisions: "Key details and commitments noted in description.",
@@ -1971,92 +2085,243 @@ function Meetings({ customer }: { customer: Customer }) {
       ) : (
         <div className="relative space-y-3 before:absolute before:bottom-6 before:left-[17px] before:top-6 before:w-px before:bg-border">
           {meetings.map((meeting) => (
-            <div key={meeting.id} className="relative flex gap-4">
-              <span className="z-10 mt-5 grid size-9 shrink-0 place-items-center rounded-full border bg-background">
-                <CalendarPlus className="size-3.5" />
-              </span>
-              <div className="panel flex-1 p-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-sm font-semibold">{meeting.title}</h3>
-                      <StatusBadge
-                        status={
-                          completed.includes(meeting.id) ? "Completed" : meeting.status
-                        }
-                      />
-                    </div>
-                    <div className="mt-1 font-mono text-[10px] text-muted-foreground">
-                      {meeting.date} · Owner {meeting.owner}
-                    </div>
-                  </div>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="size-7">
-                        <MoreHorizontal className="size-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem
-                        onClick={() => toast.success("Meeting detail opened")}
-                      >
-                        View meeting
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => toast.success("Meeting edit mode opened")}
-                      >
-                        Edit meeting
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => {
-                          setCompleted([...completed, meeting.id]);
-                          toast.success("Actions marked complete");
-                        }}
-                      >
-                        <Check className="size-3.5" />
-                        Mark complete
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem className="text-rose-600">
-                        Delete meeting
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-                <p className="mt-3 text-[12px] leading-5 text-muted-foreground">
-                  {meeting.summary}
-                </p>
-                <div className="mt-3 grid gap-3 md:grid-cols-2">
-                  <div className="rounded-lg bg-muted/35 p-3">
-                    <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      Key decision
-                    </div>
-                    <p className="mt-1 text-[12px] leading-5">{meeting.decisions}</p>
-                  </div>
-                  <div className="rounded-lg bg-muted/35 p-3">
-                    <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      Action items
-                    </div>
-                    <div className="mt-1.5 space-y-1.5">
-                      {meeting.actionItems.map((item) => (
-                        <div className="flex items-center gap-2 text-[11px]" key={item}>
-                          <span className="size-1.5 rounded-full bg-primary" />
-                          {item}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                <div className="mt-3 flex flex-wrap gap-3 text-[10px] text-muted-foreground">
-                  <span>Participants: {meeting.participants.join(", ")}</span>
-                  <span>Due {meeting.dueDate}</span>
-                  <span>Follow-up {meeting.followUp}</span>
-                </div>
-              </div>
-            </div>
+            <MeetingRow
+              key={meeting.id}
+              meeting={meeting}
+              onUpdate={handleUpdate}
+              onDelete={handleDelete}
+            />
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function MeetingRow({
+  meeting,
+  onUpdate,
+  onDelete,
+}: {
+  meeting: any;
+  onUpdate: (
+    id: string,
+    updates: { title?: string; description?: string; meetingDate?: string; status?: string }
+  ) => Promise<boolean>;
+  onDelete: (id: string) => Promise<boolean>;
+}) {
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const [editTitle, setEditTitle] = useState(meeting.title || "");
+  const [editSummary, setEditSummary] = useState(meeting.summary || "");
+  const [editDate, setEditDate] = useState("");
+  const [editStatus, setEditStatus] = useState(meeting.status || "Scheduled");
+
+  useEffect(() => {
+    if (isEditOpen) {
+      setEditTitle(meeting.title || "");
+      setEditSummary(meeting.summary || "");
+      setEditStatus(meeting.status || "Scheduled");
+      if (meeting.rawDate) {
+        setEditDate(meeting.rawDate.split("T")[0]);
+      }
+    }
+  }, [isEditOpen, meeting]);
+
+  const handleEditSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!editTitle.trim()) {
+      toast.error("Meeting title is required");
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const ok = await onUpdate(meeting.id, {
+        title: editTitle.trim(),
+        description: editSummary.trim(),
+        meetingDate: editDate || undefined,
+        status: editStatus,
+      });
+      if (ok) setIsEditOpen(false);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteConfirm = async () => {
+    setIsDeleting(true);
+    try {
+      const ok = await onDelete(meeting.id);
+      if (ok) setIsDeleteOpen(false);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  return (
+    <div className="relative flex gap-4">
+      <span className="z-10 mt-5 grid size-9 shrink-0 place-items-center rounded-full border bg-background">
+        <CalendarPlus className="size-3.5" />
+      </span>
+      <div className="panel flex-1 p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-semibold">{meeting.title}</h3>
+              <StatusBadge status={meeting.status} />
+            </div>
+            <div className="mt-1 font-mono text-[10px] text-muted-foreground">
+              {meeting.date} · Owner {meeting.owner}
+            </div>
+          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="size-7">
+                <MoreHorizontal className="size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={() => setIsEditOpen(true)}>
+                <Edit3 className="size-3.5 mr-1.5" />
+                Edit meeting
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => onUpdate(meeting.id, { status: "Completed" })}
+              >
+                <Check className="size-3.5 mr-1.5" />
+                Mark complete
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="text-rose-600 focus:text-rose-600"
+                onSelect={() => setIsDeleteOpen(true)}
+              >
+                <Trash2 className="size-3.5 mr-1.5" />
+                Delete meeting
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+        <p className="mt-3 text-[12px] leading-5 text-muted-foreground">
+          {meeting.summary}
+        </p>
+        <div className="mt-3 flex flex-wrap gap-3 text-[10px] text-muted-foreground">
+          <span>Participants: {meeting.participants.join(", ")}</span>
+          <span>Due {meeting.dueDate}</span>
+        </div>
+      </div>
+
+      {/* Edit Meeting Dialog */}
+      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="text-base font-semibold">Edit meeting</DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Update meeting title, schedule, status, and minutes.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleEditSubmit} className="space-y-3 pt-2">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Title</label>
+              <Input
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+                placeholder="Meeting title"
+                className="text-xs"
+                disabled={isSaving}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Date</label>
+                <Input
+                  type="date"
+                  value={editDate}
+                  onChange={(e) => setEditDate(e.target.value)}
+                  className="text-xs"
+                  disabled={isSaving}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Status</label>
+                <Select value={editStatus} onValueChange={setEditStatus} disabled={isSaving}>
+                  <SelectTrigger className="text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Scheduled">Scheduled</SelectItem>
+                    <SelectItem value="Follow-up due">Follow-up due</SelectItem>
+                    <SelectItem value="Completed">Completed</SelectItem>
+                    <SelectItem value="Cancelled">Cancelled</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Summary & Notes</label>
+              <Textarea
+                value={editSummary}
+                onChange={(e) => setEditSummary(e.target.value)}
+                placeholder="Key decisions and action items..."
+                rows={4}
+                className="text-xs"
+                disabled={isSaving}
+              />
+            </div>
+            <DialogFooter className="pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setIsEditOpen(false)}
+                disabled={isSaving}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" size="sm" disabled={isSaving}>
+                {isSaving ? <Loader2 className="mr-1.5 size-3.5 animate-spin" /> : null}
+                Save changes
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Meeting Dialog */}
+      <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle className="text-base font-semibold">Delete meeting</DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Are you sure you want to delete this meeting? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setIsDeleteOpen(false)}
+              disabled={isDeleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              onClick={handleDeleteConfirm}
+              disabled={isDeleting}
+            >
+              {isDeleting ? <Loader2 className="mr-1.5 size-3.5 animate-spin" /> : null}
+              Delete meeting
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -2197,7 +2462,98 @@ function Billing({
   customer: Customer;
   onInvoice: (invoice: Invoice) => void;
 }) {
-  const invoices = customer.invoices || [];
+  const [dbInvoices, setDbInvoices] = useState<InvoiceRecord[]>([]);
+  const [dbSubscriptions, setDbSubscriptions] = useState<SubscriptionRecord[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const fetchBillingData = useCallback(async () => {
+    if (!customer?.id) return;
+    setLoading(true);
+    try {
+      const [invs, subs] = await Promise.all([
+        getCustomerInvoices(customer.id).catch(() => []),
+        getCustomerSubscriptions(customer.id).catch(() => []),
+      ]);
+      if (Array.isArray(invs)) setDbInvoices(invs);
+      if (Array.isArray(subs)) setDbSubscriptions(subs);
+    } catch (err) {
+      console.warn("Could not load billing data from backend:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [customer?.id]);
+
+  useEffect(() => {
+    fetchBillingData();
+
+    const handleUpdated = (e: Event) => {
+      const detail = (e as CustomEvent)?.detail;
+      if (!detail || detail.customerId === customer.id) {
+        fetchBillingData();
+      }
+    };
+
+    window.addEventListener("customer-invoice-created", handleUpdated);
+    window.addEventListener("customer-operations-updated", handleUpdated);
+
+    return () => {
+      window.removeEventListener("customer-invoice-created", handleUpdated);
+      window.removeEventListener("customer-operations-updated", handleUpdated);
+    };
+  }, [fetchBillingData, customer.id]);
+
+  const activeSub = dbSubscriptions.length > 0 ? dbSubscriptions[0] : null;
+  const currentPlan = activeSub?.plan_name || customer.plan || "Growth";
+  const subscriptionStatus = activeSub?.status || customer.subscription.status || "Active";
+  const subMrr = activeSub?.mrr
+    ? Number(activeSub.mrr)
+    : (customer.subscription.mrr > 0 ? customer.subscription.mrr : 0);
+
+  const invoices: Invoice[] = useMemo(() => {
+    if (dbInvoices.length > 0) {
+      return dbInvoices.map((inv) => {
+        let dateStr = "—";
+        if (inv.issue_date || inv.created_at) {
+          try {
+            dateStr = new Date(inv.issue_date || inv.created_at).toLocaleDateString("en-US", {
+              day: "2-digit",
+              month: "short",
+              year: "numeric",
+            });
+          } catch {
+            dateStr = String(inv.issue_date || inv.created_at);
+          }
+        }
+        let dueDateStr = "—";
+        if (inv.due_date) {
+          try {
+            dueDateStr = new Date(inv.due_date).toLocaleDateString("en-US", {
+              day: "2-digit",
+              month: "short",
+              year: "numeric",
+            });
+          } catch {
+            dueDateStr = String(inv.due_date);
+          }
+        }
+        const amt = Number(inv.amount) || 0;
+        return {
+          id: inv.invoice_number || inv.id,
+          date: dateStr,
+          dueDate: dueDateStr,
+          product: inv.description || "Growth + WhatsApp API",
+          amount: amt,
+          tax: Math.round(amt * 0.18),
+          total: Math.round(amt * 1.18),
+          status: (inv.status || "Paid") as any,
+          paymentDate: inv.paid_date || undefined,
+        };
+      });
+    }
+    return customer.invoices || [];
+  }, [dbInvoices, customer.invoices]);
+
+  const lifetimeBilled = invoices.reduce((sum, item) => sum + item.total, 0);
 
   return (
     <div className="space-y-4">
@@ -2221,28 +2577,24 @@ function Billing({
               <div className="text-[10px] uppercase tracking-wider opacity-60">
                 Current plan
               </div>
-              <div className="mt-2 text-xl font-semibold">{customer.plan || "—"}</div>
+              <div className="mt-2 text-xl font-semibold">{currentPlan}</div>
               <div className="mt-4 text-[11px] opacity-70">
-                {customer.subscription.billingCycle} billing
+                {customer.subscription.billingCycle || "Annual"} billing
               </div>
             </div>
             <div className="grid grid-cols-2 gap-x-5 sm:col-span-2">
               {[
-                ["Status", customer.subscription.status || "—"],
-                ["Payment", customer.subscription.paymentStatus || "—"],
-                ["Start date", customer.subscription.startDate || "—"],
-                ["Renewal date", customer.subscription.renewalDate || "—"],
+                ["Status", subscriptionStatus],
+                ["Payment", customer.subscription.paymentStatus || "Current"],
+                ["Start date", activeSub?.current_period_start || customer.subscription.startDate || "—"],
+                ["Renewal date", activeSub?.current_period_end || customer.subscription.renewalDate || "—"],
                 [
                   "MRR",
-                  customer.subscription.mrr > 0
-                    ? formatCurrency(customer.subscription.mrr)
-                    : "—",
+                  subMrr > 0 ? formatCurrency(subMrr) : "—",
                 ],
                 [
                   "Contract value",
-                  customer.subscription.contractValue > 0
-                    ? formatCurrency(customer.subscription.contractValue)
-                    : "—",
+                  subMrr > 0 ? formatCurrency(subMrr * 12) : (customer.subscription.contractValue > 0 ? formatCurrency(customer.subscription.contractValue) : "—"),
                 ],
               ].map(([label, value]) => (
                 <div key={label} className="border-b py-2.5">
@@ -2260,14 +2612,14 @@ function Billing({
             title="Revenue history"
             description="Rolling billed revenue"
           />
-          {customer.subscription.mrr > 0 ? (
+          {subMrr > 0 ? (
             <div className="h-[180px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                   data={["Apr", "May", "Jun", "Jul", "Aug", "Sep"].map(
                     (month, index) => ({
                       month,
-                      revenue: customer.subscription.mrr * (0.82 + index * 0.04),
+                      revenue: subMrr * (0.82 + index * 0.04),
                     })
                   )}
                   margin={{ top: 8, right: 4, left: -16, bottom: 0 }}
@@ -2310,30 +2662,46 @@ function Billing({
         </div>
       </div>
       <div className="panel overflow-hidden">
-        <div className="flex items-center justify-between p-4 pb-2">
+        <div className="flex flex-wrap items-center justify-between gap-3 p-4 pb-2">
           <SectionHeader
             title="Invoices"
             description={
               invoices.length > 0
-                ? `${invoices.length} invoices · ${formatCurrency(
-                    invoices.reduce((sum, item) => sum + item.total, 0)
-                  )} lifetime billed`
+                ? `${invoices.length} invoices · ${formatCurrency(lifetimeBilled)} lifetime billed`
                 : "0 invoices · ₹0 billed"
             }
           />
-          {invoices.length > 0 && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 bg-card text-xs"
-              onClick={() => toast.success("Invoice export ready")}
-            >
-              <Download className="size-3.5" />
-              Export
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            <QuickFormDialog
+              type="invoice"
+              customerId={customer.id}
+              title="Create invoice"
+              description="Record a new commercial invoice for this account."
+              trigger={
+                <Button size="sm" className="h-8 text-xs">
+                  <Plus className="mr-1.5 size-3.5" />
+                  Add invoice
+                </Button>
+              }
+            />
+            {invoices.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 bg-card text-xs"
+                onClick={() => toast.success("Invoice export ready")}
+              >
+                <Download className="mr-1.5 size-3.5" />
+                Export
+              </Button>
+            )}
+          </div>
         </div>
-        {invoices.length === 0 ? (
+        {loading && invoices.length === 0 ? (
+          <div className="panel flex items-center justify-center p-8 text-xs text-muted-foreground">
+            <Loader2 className="mr-2 size-4 animate-spin" /> Loading invoices…
+          </div>
+        ) : invoices.length === 0 ? (
           <div className="p-8 text-center text-xs text-muted-foreground">
             No invoices generated for this account.
           </div>
@@ -2562,6 +2930,114 @@ function OfferingDrawer({
   );
 }
 
+function generateInvoiceHtml(invoice: Invoice, customer: Customer): string {
+  const companyName = customer.company || "Customer";
+  const contactName = customer.contact?.name || "Accounts Dept";
+  const contactEmail = customer.contact?.email || "";
+  const subtotal = Number(invoice.amount) || 0;
+  const tax = Number(invoice.tax) || 0;
+  const total = Number(invoice.total) || (subtotal + tax);
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Invoice ${invoice.id} - ${companyName}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 40px; color: #0f172a; background: #f8fafc; }
+    .invoice-card { max-width: 680px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 14px; padding: 40px; background: #fff; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #f1f5f9; padding-bottom: 24px; margin-bottom: 24px; }
+    .brand { font-size: 22px; font-weight: 800; color: #0f172a; letter-spacing: -0.03em; }
+    .brand span { color: #2563eb; }
+    .invoice-title { text-align: right; }
+    .invoice-num { font-size: 20px; font-weight: 700; color: #0f172a; margin-top: 4px; font-family: monospace; }
+    .badge { display: inline-block; padding: 4px 10px; border-radius: 9999px; font-size: 11px; font-weight: 600; text-transform: uppercase; margin-top: 6px; background: #dcfce7; color: #15803d; }
+    .badge.pending { background: #fef3c7; color: #b45309; }
+    .badge.overdue { background: #fee2e2; color: #b91c1c; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 28px; }
+    .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8; font-weight: 600; }
+    .val { font-size: 13px; font-weight: 500; color: #334155; margin-top: 4px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; margin-bottom: 24px; }
+    th { text-align: left; padding: 10px 12px; font-size: 11px; text-transform: uppercase; color: #64748b; border-bottom: 1px solid #e2e8f0; }
+    td { padding: 14px 12px; font-size: 13px; border-bottom: 1px solid #f1f5f9; }
+    .text-right { text-align: right; }
+    .totals { margin-left: auto; width: 280px; }
+    .totals-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; color: #64748b; }
+    .totals-row.grand { font-size: 16px; font-weight: 700; color: #0f172a; border-top: 2px solid #e2e8f0; padding-top: 10px; margin-top: 6px; }
+    .footer { margin-top: 36px; padding-top: 20px; border-top: 1px solid #f1f5f9; text-align: center; font-size: 11px; color: #94a3b8; }
+    @media print {
+      body { padding: 0; background: #fff; }
+      .invoice-card { border: none; box-shadow: none; padding: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="invoice-card">
+    <div class="header">
+      <div>
+        <div class="brand">Super<span>block</span></div>
+        <div style="font-size: 12px; color: #64748b; margin-top: 4px;">Commercial Tax Invoice</div>
+      </div>
+      <div class="invoice-title">
+        <div style="font-size: 11px; text-transform: uppercase; color: #94a3b8; font-weight: 600;">Invoice Reference</div>
+        <div class="invoice-num">${invoice.id}</div>
+        <span class="badge ${invoice.status.toLowerCase()}">${invoice.status}</span>
+      </div>
+    </div>
+    <div class="grid">
+      <div>
+        <div class="label">Billed To</div>
+        <div class="val" style="font-weight: 700; font-size: 14px;">${companyName}</div>
+        <div class="val">${contactName}</div>
+        ${contactEmail ? `<div class="val">${contactEmail}</div>` : ""}
+      </div>
+      <div style="text-align: right;">
+        <div class="label">Invoice Dates</div>
+        <div class="val">Issued: <b>${invoice.date}</b></div>
+        <div class="val">Due: <b>${invoice.dueDate}</b></div>
+        ${invoice.paymentDate ? `<div class="val">Paid: <b>${invoice.paymentDate}</b></div>` : ""}
+      </div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Item / Service</th>
+          <th class="text-right">Amount (INR)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>
+            <div style="font-weight: 600;">${invoice.product || "Platform Subscription & WhatsApp Usage"}</div>
+            <div style="font-size: 11px; color: #64748b; margin-top: 2px;">Monthly platform operations & broadcast message traffic</div>
+          </td>
+          <td class="text-right" style="font-family: monospace;">₹${subtotal.toLocaleString("en-IN")}</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="totals">
+      <div class="totals-row">
+        <span>Subtotal</span>
+        <span style="font-family: monospace;">₹${subtotal.toLocaleString("en-IN")}</span>
+      </div>
+      <div class="totals-row">
+        <span>GST / Tax (18%)</span>
+        <span style="font-family: monospace;">₹${tax.toLocaleString("en-IN")}</span>
+      </div>
+      <div class="totals-row grand">
+        <span>Total Payable</span>
+        <span style="font-family: monospace;">₹${total.toLocaleString("en-IN")}</span>
+      </div>
+    </div>
+    <div class="footer">
+      Thank you for your business. For accounts or payment queries, contact accounts@superblock.chat.
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
 function InvoiceDialog({
   invoice,
   customer,
@@ -2571,6 +3047,32 @@ function InvoiceDialog({
   customer: Customer;
   onOpenChange: (open: boolean) => void;
 }) {
+  const handleDownloadPdf = () => {
+    if (!invoice) return;
+    const html = generateInvoiceHtml(invoice, customer);
+    const printWindow = window.open("", "_blank");
+    if (printWindow) {
+      printWindow.document.write(html);
+      printWindow.document.close();
+      printWindow.focus();
+      setTimeout(() => {
+        printWindow.print();
+      }, 300);
+      toast.success("Print & PDF dialog opened");
+    } else {
+      toast.error("Pop-up blocked. Please allow pop-ups to download PDF.");
+    }
+  };
+
+  const handleOpenInvoice = () => {
+    if (!invoice) return;
+    const html = generateInvoiceHtml(invoice, customer);
+    const blob = new Blob([html], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    window.open(url, "_blank");
+    toast.success("Invoice opened in new tab");
+  };
+
   return (
     <Dialog open={!!invoice} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[560px]">
@@ -2632,13 +3134,13 @@ function InvoiceDialog({
             <div className="mt-4 flex justify-end gap-2">
               <Button
                 variant="outline"
-                onClick={() => toast.success("Invoice downloaded")}
+                onClick={handleDownloadPdf}
               >
-                <Download className="size-4" />
+                <Download className="mr-1.5 size-4" />
                 Download PDF
               </Button>
               <Button
-                onClick={() => toast.success("Invoice opened in a new view")}
+                onClick={handleOpenInvoice}
               >
                 Open invoice
               </Button>

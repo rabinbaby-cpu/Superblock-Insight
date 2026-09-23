@@ -61,9 +61,20 @@ export async function getSubscriptionsHandler(
       LEFT JOIN public.plans p ON s.plan_id = p.id
       WHERE s.customer_id::text = $1
          OR s.customer_id IN (
-           SELECT cd.id 
-           FROM public.customers_details cd 
-           WHERE LOWER(cd.client_user_id) = LOWER($1)
+           SELECT c.id 
+           FROM public.customers_details c
+           LEFT JOIN public.users u ON (
+             LOWER(c.client_user_id) = LOWER(u.user_name) 
+             OR LOWER(c.client_user_id) = LOWER(u.email) 
+             OR LOWER(c.client_user_id) = LOWER(u.user_email)
+             OR LOWER(c.client_user_id) = LOWER(u.user_id::text)
+           )
+           WHERE c.id::text = $1 
+              OR LOWER(c.client_user_id) = LOWER($1)
+              OR u.user_id::text = $1
+              OR LOWER(u.user_name) = LOWER($1)
+              OR LOWER(u.email) = LOWER($1)
+              OR LOWER(u.user_email) = LOWER($1)
          )
       ORDER BY s.created_at DESC NULLS LAST;
     `;

@@ -18,7 +18,10 @@ import { deleteNoteHandler } from "./lambda/notes/deleteNote";
 import { updateNoteHandler } from "./lambda/notes/updateNote";
 import { getMeetingsHandler } from "./lambda/meetings/getMeetings";
 import { createMeetingHandler } from "./lambda/meetings/createMeeting";
+import { deleteMeetingHandler } from "./lambda/meetings/deleteMeeting";
+import { updateMeetingHandler } from "./lambda/meetings/updateMeeting";
 import { getInvoicesHandler } from "./lambda/invoices/getInvoices";
+import { createInvoiceHandler } from "./lambda/invoices/createInvoice";
 import { getSubscriptionsHandler } from "./lambda/subscriptions/getSubscriptions";
 import { getProductsHandler } from "./lambda/products/getProducts";
 
@@ -330,6 +333,52 @@ app.use(express.json());
     }
   });
 
+  app.delete("/api/meetings/:id", async (req, res) => {
+    try {
+      const result = await deleteMeetingHandler({
+        httpMethod: "DELETE",
+        path: `/meetings/${req.params.id}`,
+        pathParameters: { id: req.params.id },
+        headers: req.headers as Record<string, string | undefined>,
+      });
+      let responseData: unknown;
+      try {
+        responseData = JSON.parse(result.body);
+      } catch {
+        responseData = { message: result.body };
+      }
+      return res.status(result.statusCode).json(responseData);
+    } catch (error: any) {
+      console.error("Error deleting meeting:", error);
+      return res.status(500).json({ success: false, error: error?.message || "Internal server error" });
+    }
+  });
+
+  const handleUpdateMeeting = async (req: express.Request, res: express.Response) => {
+    try {
+      const result = await updateMeetingHandler({
+        httpMethod: req.method,
+        path: `/meetings/${req.params.id}`,
+        pathParameters: { id: req.params.id },
+        headers: req.headers as Record<string, string | undefined>,
+        body: typeof req.body === "string" ? req.body : JSON.stringify(req.body),
+      });
+      let responseData: unknown;
+      try {
+        responseData = JSON.parse(result.body);
+      } catch {
+        responseData = { message: result.body };
+      }
+      return res.status(result.statusCode).json(responseData);
+    } catch (error: any) {
+      console.error("Error updating meeting:", error);
+      return res.status(500).json({ success: false, error: error?.message || "Internal server error" });
+    }
+  };
+
+  app.put("/api/meetings/:id", handleUpdateMeeting);
+  app.patch("/api/meetings/:id", handleUpdateMeeting);
+
   // Invoices endpoint
   app.get("/api/invoices", async (req, res) => {
     try {
@@ -349,6 +398,27 @@ app.use(express.json());
     } catch (error: any) {
       console.error("Error fetching invoices:", error);
       return res.status(500).json({ success: false, error: error?.message || "Internal server error", invoices: [] });
+    }
+  });
+
+  app.post("/api/invoices", async (req, res) => {
+    try {
+      const result = await createInvoiceHandler({
+        httpMethod: "POST",
+        path: "/invoices",
+        headers: req.headers as Record<string, string | undefined>,
+        body: typeof req.body === "string" ? req.body : JSON.stringify(req.body),
+      });
+      let responseData: unknown;
+      try {
+        responseData = JSON.parse(result.body);
+      } catch {
+        responseData = { message: result.body };
+      }
+      return res.status(result.statusCode).json(responseData);
+    } catch (error: any) {
+      console.error("Error creating invoice:", error);
+      return res.status(500).json({ success: false, error: error?.message || "Internal server error" });
     }
   });
 

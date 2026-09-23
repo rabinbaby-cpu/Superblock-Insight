@@ -220,3 +220,112 @@ export async function createCustomerMeeting(input: {
 
   return data.meeting;
 }
+
+export async function updateCustomerMeeting(
+  meetingId: string,
+  input: {
+    title?: string;
+    description?: string;
+    meetingDate?: string;
+    durationMinutes?: number;
+    status?: string;
+    meetingUrl?: string;
+  }
+): Promise<MeetingRecord> {
+  if (!meetingId) {
+    throw new Error("Meeting ID is required");
+  }
+
+  const headers = await authHeaders();
+  const payload = {
+    action: "update_meeting",
+    meetingId,
+    ...input,
+  };
+
+  if (isLocalhost()) {
+    const res = await fetch(`/api/meetings/${encodeURIComponent(meetingId)}`, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data?.success || !data.meeting) {
+      throw new Error(data?.error || `Failed to update meeting (${res.status})`);
+    }
+    return data.meeting;
+  }
+
+  // Production Strategy 1: Path-based
+  try {
+    const res = await fetch(`${PRODUCTION_DASHBOARD_BASE}/meetings/${encodeURIComponent(meetingId)}`, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify(payload),
+    });
+    if (res.ok) {
+      const data = await res.json().catch(() => null);
+      if (data?.success && data.meeting) return data.meeting;
+    }
+  } catch (err) {
+    console.warn("PUT to dashboard/meetings failed:", err);
+  }
+
+  // Production Strategy 2: Action query param
+  const res = await fetch(`${PRODUCTION_DASHBOARD_BASE}?action=update_meeting&id=${encodeURIComponent(meetingId)}`, {
+    method: "PUT",
+    headers,
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok || !data?.success || !data.meeting) {
+    throw new Error(data?.error || `Failed to update meeting (${res.status})`);
+  }
+  return data.meeting;
+}
+
+export async function deleteCustomerMeeting(meetingId: string): Promise<boolean> {
+  if (!meetingId) {
+    throw new Error("Meeting ID is required");
+  }
+
+  const headers = await authHeaders();
+
+  if (isLocalhost()) {
+    const res = await fetch(`/api/meetings/${encodeURIComponent(meetingId)}`, {
+      method: "DELETE",
+      headers,
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data?.success) {
+      throw new Error(data?.error || `Failed to delete meeting (${res.status})`);
+    }
+    return true;
+  }
+
+  // Production Strategy 1: Path-based
+  try {
+    const res = await fetch(`${PRODUCTION_DASHBOARD_BASE}/meetings/${encodeURIComponent(meetingId)}`, {
+      method: "DELETE",
+      headers,
+    });
+    if (res.ok) {
+      const data = await res.json().catch(() => null);
+      if (data?.success) return true;
+    }
+  } catch (err) {
+    console.warn("DELETE to dashboard/meetings failed:", err);
+  }
+
+  // Production Strategy 2: Action query param
+  const res = await fetch(`${PRODUCTION_DASHBOARD_BASE}?action=delete_meeting&id=${encodeURIComponent(meetingId)}`, {
+    method: "DELETE",
+    headers,
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok || !data?.success) {
+    throw new Error(data?.error || `Failed to delete meeting (${res.status})`);
+  }
+  return true;
+}
+

@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { fetchAuthSession } from "aws-amplify/auth";
 import { createCustomerMeeting } from "@/lib/api/meetings";
 import { createCustomerNote } from "@/lib/api/notes";
+import { createCustomerInvoice } from "@/lib/api/billing";
 
 export interface QuickFormDefaultValues {
   name?: string;
@@ -30,7 +31,7 @@ export function QuickFormDialog({
   trigger: ReactNode;
   title: string;
   description: string;
-  type?: "general" | "note" | "meeting" | "customer" | "product";
+  type?: "general" | "note" | "meeting" | "customer" | "product" | "invoice";
   defaultValues?: QuickFormDefaultValues;
   customerId?: string;
 }) {
@@ -40,6 +41,9 @@ export function QuickFormDialog({
   const [formContent, setFormContent] = useState(defaultValues?.description || "");
   const [meetingDate, setMeetingDate] = useState("");
   const [meetingOwner, setMeetingOwner] = useState("Anika Shah");
+  const [invoiceAmount, setInvoiceAmount] = useState("");
+  const [invoiceStatus, setInvoiceStatus] = useState("Paid");
+  const [invoiceDueDate, setInvoiceDueDate] = useState("");
 
   useEffect(() => {
     if (open) {
@@ -47,6 +51,9 @@ export function QuickFormDialog({
       setFormContent(defaultValues?.description || "");
       setMeetingDate("");
       setMeetingOwner("Anika Shah");
+      setInvoiceAmount("");
+      setInvoiceStatus("Paid");
+      setInvoiceDueDate(new Date(Date.now() + 14 * 86400000).toISOString().split("T")[0]);
     }
   }, [open, defaultValues?.name, defaultValues?.description]);
 
@@ -162,6 +169,65 @@ export function QuickFormDialog({
       return;
     }
 
+    if (type === "invoice") {
+      const targetCustomerId =
+        customerId ||
+        defaultValues?.customerId ||
+        (typeof window !== "undefined"
+          ? window.location.pathname.match(/\/customers\/([^/?#]+)/)?.[1]
+          : undefined);
+
+      if (!targetCustomerId) {
+        toast.error("Customer ID is required to create an invoice");
+        return;
+      }
+
+      const amountNum = parseFloat(invoiceAmount);
+      if (isNaN(amountNum) || amountNum <= 0) {
+        toast.error("Please enter a valid invoice amount");
+        return;
+      }
+
+      setSaving(true);
+      try {
+        const createdInvoice = await createCustomerInvoice({
+          customerId: targetCustomerId,
+          invoiceNumber: formName.trim() || `INV-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 900) + 100)}`,
+          amount: amountNum,
+          description: formContent.trim() || undefined,
+          dueDate: invoiceDueDate || new Date(Date.now() + 14 * 86400000).toISOString().split("T")[0],
+          status: invoiceStatus || "Paid",
+        });
+
+        toast.success("Invoice created", {
+          description: "Your invoice has been recorded in the database.",
+        });
+        setOpen(false);
+        setFormName("");
+        setFormContent("");
+        setInvoiceAmount("");
+
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("customer-operations-updated", {
+              detail: { customerId: targetCustomerId, invoice: createdInvoice },
+            })
+          );
+          window.dispatchEvent(
+            new CustomEvent("customer-invoice-created", {
+              detail: { customerId: targetCustomerId, invoice: createdInvoice },
+            })
+          );
+        }
+      } catch (err: any) {
+        console.error("Error creating invoice:", err);
+        toast.error(err?.message || "Failed to create invoice");
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+
     setSaving(true);
     window.setTimeout(() => {
       setSaving(false);
@@ -180,7 +246,7 @@ export function QuickFormDialog({
       <DialogContent className="sm:max-w-[520px]">
         <DialogHeader><DialogTitle>{title}</DialogTitle><DialogDescription>{description}</DialogDescription></DialogHeader>
         <div className="grid gap-4 py-1">
-          <div className="grid gap-1.5"><Label htmlFor={`${title}-name`} className="text-xs">{type === "meeting" ? "Meeting title" : type === "note" ? "Note title" : type === "customer" ? "Company name" : "Name"}</Label><Input id={`${title}-name`} value={formName} onChange={(e) => setFormName(e.target.value)} placeholder={type === "meeting" ? "Q4 strategy review" : type === "note" ? "Add a clear title" : "Enter a name"} /></div>
+          <div className="grid gap-1.5"><Label htmlFor={`${title}-name`} className="text-xs">{type === "meeting" ? "Meeting title" : type === "note" ? "Note title" : type === "invoice" ? "Invoice number" : type === "customer" ? "Company name" : "Name"}</Label><Input id={`${title}-name`} value={formName} onChange={(e) => setFormName(e.target.value)} placeholder={type === "meeting" ? "Q4 strategy review" : type === "note" ? "Add a clear title" : type === "invoice" ? "INV-2026-002 (optional)" : "Enter a name"} /></div>
           {type === "customer" && <div className="grid grid-cols-2 gap-3"><div className="grid gap-1.5"><Label className="text-xs">Contact email</Label><Input type="email" defaultValue={defaultValues?.email} placeholder="owner@company.com" /></div><div className="grid gap-1.5"><Label className="text-xs">Plan</Label><Select defaultValue={defaultValues?.plan || "growth"}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="starter">Starter</SelectItem><SelectItem value="growth">Growth</SelectItem><SelectItem value="advanced">Advanced</SelectItem></SelectContent></Select></div></div>}
           {type === "meeting" && (
             <div className="grid grid-cols-2 gap-3">
@@ -205,7 +271,39 @@ export function QuickFormDialog({
               </div>
             </div>
           )}
-          <div className="grid gap-1.5"><Label className="text-xs">{type === "note" ? "Note" : type === "meeting" ? "Discussion summary" : "Description"}</Label><Textarea rows={4} value={formContent} onChange={(e) => setFormContent(e.target.value)} placeholder="Add context for your team…" /></div>
+          {type === "invoice" && (
+            <div className="grid grid-cols-3 gap-3">
+              <div className="grid gap-1.5">
+                <Label className="text-xs">Amount (₹)</Label>
+                <Input
+                  type="number"
+                  placeholder="15000"
+                  value={invoiceAmount}
+                  onChange={(e) => setInvoiceAmount(e.target.value)}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label className="text-xs">Due date</Label>
+                <Input
+                  type="date"
+                  value={invoiceDueDate}
+                  onChange={(e) => setInvoiceDueDate(e.target.value)}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label className="text-xs">Status</Label>
+                <Select value={invoiceStatus} onValueChange={setInvoiceStatus}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Paid">Paid</SelectItem>
+                    <SelectItem value="Pending">Pending</SelectItem>
+                    <SelectItem value="Overdue">Overdue</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+          <div className="grid gap-1.5"><Label className="text-xs">{type === "note" ? "Note" : type === "meeting" ? "Discussion summary" : type === "invoice" ? "Product / Service description" : "Description"}</Label><Textarea rows={4} value={formContent} onChange={(e) => setFormContent(e.target.value)} placeholder={type === "invoice" ? "Growth Plan + WhatsApp API Usage" : "Add context for your team…"} /></div>
         </div>
         <DialogFooter><Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button><Button onClick={save} disabled={saving}>{saving ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}{saving ? "Saving…" : "Save"}</Button></DialogFooter>
       </DialogContent>

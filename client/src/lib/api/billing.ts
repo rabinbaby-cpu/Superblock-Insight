@@ -295,3 +295,65 @@ export async function getBillingProducts(): Promise<ProductRecord[]> {
 
   return Array.isArray(data.products) ? data.products : [];
 }
+
+export async function createCustomerInvoice(input: {
+  customerId: string;
+  invoiceNumber?: string;
+  amount: number;
+  currency?: string;
+  status?: string;
+  issueDate?: string;
+  dueDate?: string;
+  description?: string;
+}): Promise<InvoiceRecord> {
+  if (!input.customerId) {
+    throw new Error("Customer ID is required");
+  }
+
+  const headers = await authHeaders();
+  const payload = {
+    action: "create_invoice",
+    ...input,
+  };
+
+  if (isLocalhost()) {
+    const response = await fetch("/api/invoices", {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload),
+    });
+    const data = await response.json().catch(() => null);
+    if (!response.ok || !data?.success || !data.invoice) {
+      throw new Error(data?.error || `Failed to create invoice (status ${response.status})`);
+    }
+    return data.invoice;
+  }
+
+  // Production Strategy 1: Path-based
+  try {
+    const response = await fetch(`${PRODUCTION_DASHBOARD_BASE}/invoices`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload),
+    });
+    const data = await response.json().catch(() => null);
+    if (response.ok && data?.success && data.invoice) {
+      return data.invoice;
+    }
+  } catch (err) {
+    console.warn("POST to customeranalyticsdashaboard/invoices failed:", err);
+  }
+
+  // Production Strategy 2: Action param
+  const response = await fetch(`${PRODUCTION_DASHBOARD_BASE}?action=create_invoice`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload),
+  });
+  const data = await response.json().catch(() => null);
+  if (!response.ok || !data?.success || !data.invoice) {
+    throw new Error(data?.error || `Failed to create invoice (status ${response.status})`);
+  }
+  return data.invoice;
+}
+
