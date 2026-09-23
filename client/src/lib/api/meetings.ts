@@ -41,10 +41,8 @@ async function authHeaders(): Promise<Record<string, string>> {
 
   try {
     const session = await fetchAuthSession();
-    const token =
-      session?.tokens?.accessToken?.toString() ||
-      session?.tokens?.idToken?.toString() ||
-      "";
+    // Strictly use Cognito Access Token for dashboard API
+    const token = session?.tokens?.accessToken?.toString() || "";
 
     if (token) {
       headers.Authorization = `Bearer ${token}`;
@@ -57,10 +55,17 @@ async function authHeaders(): Promise<Record<string, string>> {
 }
 
 function isLocalhost(): boolean {
+  if (typeof window === "undefined") return false;
+  const host = window.location.hostname;
   return (
-    typeof window !== "undefined" &&
-    (window.location.hostname === "localhost" ||
-      window.location.hostname === "127.0.0.1")
+    Boolean(import.meta.env.DEV) ||
+    host === "localhost" ||
+    host === "127.0.0.1" ||
+    host === "0.0.0.0" ||
+    host.endsWith(".local") ||
+    host.startsWith("192.168.") ||
+    host.startsWith("10.") ||
+    host.startsWith("172.")
   );
 }
 

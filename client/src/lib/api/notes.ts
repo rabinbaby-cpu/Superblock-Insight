@@ -36,16 +36,23 @@ const PRODUCTION_DASHBOARD_BASE =
   "https://api.superblock.chat/customeranalyticsdashboard";
 
 function isLocalhost(): boolean {
+  if (typeof window === "undefined") return false;
+  const host = window.location.hostname;
   return (
-    typeof window !== "undefined" &&
-    (window.location.hostname === "localhost" ||
-      window.location.hostname === "127.0.0.1")
+    Boolean(import.meta.env.DEV) ||
+    host === "localhost" ||
+    host === "127.0.0.1" ||
+    host === "0.0.0.0" ||
+    host.endsWith(".local") ||
+    host.startsWith("192.168.") ||
+    host.startsWith("10.") ||
+    host.startsWith("172.")
   );
 }
 
 /**
  * Retrieves the Cognito Access Token directly from the active Amplify Auth session,
- * matching the exact auth pattern used by customerAnalytics.ts.
+ * strictly using the Access Token for the dashboard API as required.
  */
 async function getAuthHeaders(
   customHeaders: Record<string, string> = {}
@@ -57,11 +64,8 @@ async function getAuthHeaders(
 
   try {
     const session = await fetchAuthSession();
-    // Use Cognito Access Token (with fallback to ID token, matching customer fetch)
-    const token =
-      session?.tokens?.accessToken?.toString() ||
-      session?.tokens?.idToken?.toString() ||
-      "";
+    // Strictly use Cognito Access Token for dashboard API
+    const token = session?.tokens?.accessToken?.toString() || "";
     if (token) {
       headers["Authorization"] = `Bearer ${token}`;
     }

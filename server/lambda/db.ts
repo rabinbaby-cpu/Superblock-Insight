@@ -64,7 +64,8 @@ async function getDbCredentials(): Promise<{ username: string; password: string 
   if (!password) {
     try {
       const fs = await import("fs");
-      const { execSync } = await import("child_process");
+      const path = await import("path");
+      const { execFileSync } = await import("child_process");
 
       const pgAdminPython =
         "C:\\Users\\Dell\\AppData\\Local\\Programs\\pgAdmin 4\\python\\python.exe";
@@ -75,24 +76,47 @@ async function getDbCredentials(): Promise<{ username: string; password: string 
           ? pgAdminPython
           : "python";
 
-      const script =
-        "import sys, os; sys.path.insert(0, os.path.join(os.getcwd(), 'server')); import queryAnalyticsDb; conn = queryAnalyticsDb.get_connection(); print(conn.password.decode('utf-8') if isinstance(conn.password, bytes) else str(conn.password))";
-      const pass = execSync(`"${pythonExe}" -c "${script}"`, {
-        cwd: process.cwd(),
-        encoding: "utf-8",
-        stdio: ["ignore", "pipe", "ignore"],
-      }).trim();
+      const { fileURLToPath } = await import("url");
+      const currentDir =
+        typeof __dirname !== "undefined"
+          ? __dirname
+          : path.dirname(fileURLToPath(import.meta.url));
 
-      if (pass) {
-        password = pass;
-        process.env.DB_PASSWORD = pass;
+      const possibleScriptPaths = [
+        path.resolve(process.cwd(), "server", "queryAnalyticsDb.py"),
+        path.resolve(currentDir, "..", "queryAnalyticsDb.py"),
+        path.resolve(currentDir, "queryAnalyticsDb.py"),
+        path.resolve(currentDir, "..", "..", "server", "queryAnalyticsDb.py"),
+        "C:\\Users\\Dell\\Superblock-Insight\\server\\queryAnalyticsDb.py",
+      ];
+
+      let scriptPath = "";
+      for (const p of possibleScriptPaths) {
+        if (fs.existsSync(p)) {
+          scriptPath = p;
+          break;
+        }
       }
-    } catch {
-      // Ignore fallback failures when running outside local environment
+
+      if (scriptPath) {
+        const pass = execFileSync(pythonExe, [scriptPath, "--get-password"], {
+          encoding: "utf-8",
+          stdio: ["ignore", "pipe", "ignore"],
+        }).trim();
+
+        if (pass) {
+          password = pass;
+          process.env.DB_PASSWORD = pass;
+        }
+      }
+    } catch (err) {
+      console.warn("Could not retrieve local DB credentials from queryAnalyticsDb:", err);
     }
   }
 
-  cachedCredentials = { username, password };
+  if (password) {
+    cachedCredentials = { username, password };
+  }
   return { username, password };
 }
 
@@ -134,6 +158,7 @@ export async function getPool(): Promise<Pool> {
 
   cachedPool.on("error", (err) => {
     console.error("Unexpected error on idle PostgreSQL client pool:", err);
+    cachedPool = null;
   });
 
   return cachedPool;

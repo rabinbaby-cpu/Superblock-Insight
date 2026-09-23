@@ -20,7 +20,7 @@ from cryptography.hazmat.primitives.ciphers import Cipher
 from cryptography.hazmat.primitives.ciphers.algorithms import AES
 from cryptography.hazmat.decrepit.ciphers.modes import CFB8
 
-def get_connection():
+def get_credentials():
     # 1. Environment variables if present
     host = os.environ.get("PGHOST")
     port = int(os.environ.get("PGPORT", 5433))
@@ -67,7 +67,23 @@ def get_connection():
         con.close()
         dbname = os.environ.get("PGDATABASE", "superblockhq")
 
-    return pg8000.dbapi.connect(host=host, port=port, database=dbname, user=user, password=password)
+    return {
+        "host": host or "127.0.0.1",
+        "port": port,
+        "dbname": dbname,
+        "user": user or "superblockhq",
+        "password": password
+    }
+
+def get_connection():
+    creds = get_credentials()
+    return pg8000.dbapi.connect(
+        host=creds["host"],
+        port=creds["port"],
+        database=creds["dbname"],
+        user=creds["user"],
+        password=creds["password"]
+    )
 
 def format_activity_time(dt):
     if not dt:
@@ -477,6 +493,27 @@ class SafeJSONEncoder(json.JSONEncoder):
         return super().default(obj)
 
 if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] in ("--get-password", "-p"):
+        try:
+            creds = get_credentials()
+            p = creds.get("password") or ""
+            print(p.decode("utf-8") if isinstance(p, bytes) else str(p))
+            sys.exit(0)
+        except Exception as e:
+            sys.stderr.write(f"Error: {e}\n")
+            sys.exit(1)
+
+    if len(sys.argv) > 1 and sys.argv[1] in ("--credentials", "-c"):
+        try:
+            creds = get_credentials()
+            p = creds.get("password") or ""
+            creds["password"] = p.decode("utf-8") if isinstance(p, bytes) else str(p)
+            print(json.dumps(creds))
+            sys.exit(0)
+        except Exception as e:
+            print(json.dumps({"error": str(e)}))
+            sys.exit(1)
+
     try:
         res = fetch_all()
         print(json.dumps(res, cls=SafeJSONEncoder))
