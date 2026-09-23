@@ -24,6 +24,7 @@ import { getInvoicesHandler } from "./lambda/invoices/getInvoices";
 import { createInvoiceHandler } from "./lambda/invoices/createInvoice";
 import { getSubscriptionsHandler } from "./lambda/subscriptions/getSubscriptions";
 import { getProductsHandler } from "./lambda/products/getProducts";
+import { getCredentialsHandler } from "./lambda/credentials/getCredentials";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -441,6 +442,28 @@ app.use(express.json());
     } catch (error: any) {
       console.error("Error fetching subscriptions:", error);
       return res.status(500).json({ success: false, error: error?.message || "Internal server error", subscriptions: [] });
+    }
+  });
+
+  // Credentials endpoint
+  app.get("/api/credentials", async (req, res) => {
+    try {
+      const result = await getCredentialsHandler({
+        httpMethod: "GET",
+        path: "/credentials",
+        headers: req.headers as Record<string, string | undefined>,
+        queryStringParameters: req.query as Record<string, string | undefined>,
+      });
+      let responseData: unknown;
+      try {
+        responseData = JSON.parse(result.body);
+      } catch {
+        responseData = { message: result.body };
+      }
+      return res.status(result.statusCode).json(responseData);
+    } catch (error: any) {
+      console.error("Error fetching credentials:", error);
+      return res.status(500).json({ success: false, error: error?.message || "Internal server error", credentials: null });
     }
   });
 

@@ -31,9 +31,11 @@ import { getUsageMetricsHandler } from "./usageMetrics/getUsageMetrics";
 import { createUsageMetricHandler } from "./usageMetrics/createUsageMetric";
 import { getActivitiesHandler } from "./activities/getActivities";
 import { createActivityHandler } from "./activities/createActivity";
+import { getCredentialsHandler } from "./credentials/getCredentials";
 
 export * from "./types";
 export * from "./db";
+export { getCredentialsHandler } from "./credentials/getCredentials";
 export { getNotesHandler } from "./notes/getNotes";
 export { createNoteHandler } from "./notes/createNote";
 export { deleteNoteHandler } from "./notes/deleteNote";
@@ -380,6 +382,15 @@ export async function handler(
       (method === "POST" && (action === "activities" || action === "create_activity"))
     ) {
       return await createActivityHandler(event);
+    }
+
+    // 14. Credentials API
+    if (
+      (method === "GET" &&
+        (rawPath.endsWith("/credentials") || rawPath.includes("/credentials/"))) ||
+      (method === "GET" && (action === "credentials" || action === "get_credentials"))
+    ) {
+      return await getCredentialsHandler(event);
     }
 
     // Fallback 404

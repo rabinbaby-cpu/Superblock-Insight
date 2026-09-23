@@ -65,6 +65,24 @@ import {
   type SubscriptionRecord,
 } from "@/lib/api/billing";
 import {
+  getCustomerCredentials,
+  type CustomerCredentialsData,
+} from "@/lib/api/credentials";
+import {
+  ShieldCheck,
+  Terminal,
+  ExternalLink,
+  RefreshCw,
+  Globe,
+  Share2,
+  ShoppingBag,
+  Smartphone,
+  Lock,
+  Unlock,
+  CheckCircle2,
+  AlertCircle,
+} from "lucide-react";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -2327,101 +2345,367 @@ function MeetingRow({
 }
 
 function Credentials({ customer }: { customer: Customer }) {
-  const [visible, setVisible] = useState<string[]>([]);
-  const credentials = customer.credentials || [];
+  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<CustomerCredentialsData | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [visibleKeys, setVisibleKeys] = useState<string[]>([]);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  return (
-    <div>
-      <div className="mb-4">
-        <h2 className="text-base font-semibold">Customer credentials</h2>
+  const loadData = useCallback(async (isManualRefresh = false) => {
+    try {
+      if (isManualRefresh) {
+        setIsRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+      setError(null);
+      const res = await getCustomerCredentials(customer.id);
+      setData(res);
+      if (isManualRefresh) {
+        toast.success("Credentials refreshed from database");
+      }
+    } catch (err: any) {
+      console.error("Failed to load customer credentials:", err);
+      setError(err?.message || "Failed to load credentials");
+      if (isManualRefresh) {
+        toast.error("Failed to refresh credentials: " + (err?.message || "Unknown error"));
+      }
+    } finally {
+      setLoading(false);
+      setIsRefreshing(false);
+    }
+  }, [customer.id]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const isVisible = (key: string) => visibleKeys.includes(key);
+  const toggleVisibility = (key: string) => {
+    setVisibleKeys((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+    );
+  };
+
+  if (loading) {
+    return (
+      <div className="panel flex flex-col items-center justify-center p-16 text-center">
+        <Loader2 className="mb-3 size-8 animate-spin text-muted-foreground/60" />
+        <h3 className="text-sm font-semibold">Loading customer credentials...</h3>
         <p className="mt-1 text-xs text-muted-foreground">
-          Restricted internal access information. Passwords remain masked by default.
+          Querying secure system credentials for {customer.company}.
         </p>
       </div>
-      {credentials.length === 0 ? (
-        <div className="panel flex flex-col items-center justify-center p-12 text-center">
-          <KeyRound className="mb-3 size-8 text-muted-foreground/40" />
-          <h3 className="text-sm font-semibold">No credentials stored</h3>
-          <p className="mt-1 max-w-sm text-xs text-muted-foreground">
-            No system access credentials or integration secrets are configured for {customer.company}.
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <div className="panel flex flex-col items-center justify-center p-12 text-center">
+        <AlertCircle className="mb-3 size-8 text-rose-500" />
+        <h3 className="text-sm font-semibold">Unable to load credentials</h3>
+        <p className="mt-1 max-w-sm text-xs text-muted-foreground">
+          {error || "No credential record found for this customer."}
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          className="mt-4 gap-2 text-xs"
+          onClick={() => loadData(true)}
+        >
+          <RefreshCw className="size-3.5" />
+          Retry loading
+        </Button>
+      </div>
+    );
+  }
+
+  const metaConfigured = Boolean(
+    data.meta.hasToken && data.meta.businessPhoneNumberId
+  );
+
+  const curlTestSnippet = `curl -X POST "${data.meta.whatsappEndpoint || "https://api.superblock.chat/sendWhatsappMessage"}" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "client_user_id": "${data.username || "client_id"}",
+    "phone_number_id": "${data.meta.businessPhoneNumberId || ""}",
+    "to": "<PHONE_NUMBER>",
+    "template": {
+      "name": "hello_world",
+      "language": { "code": "en_US" }
+    }
+  }'`;
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <h2 className="text-base font-semibold">Customer credentials & integrations</h2>
+            <StatusBadge status={metaConfigured ? "Active" : "Partial"} />
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Live operational access keys, Meta WhatsApp Cloud API IDs, and SuperBlock platform accounts.
           </p>
         </div>
-      ) : (
-        <>
-          <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-amber-900 dark:border-amber-950 dark:bg-amber-950/30 dark:text-amber-200">
-            <KeyRound className="mt-0.5 size-4 shrink-0" />
-            <div className="text-[11px] leading-5">
-              <b>Handle with care.</b> Access information is restricted to authorized team members.
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-2 text-xs self-start sm:self-auto"
+          disabled={isRefreshing}
+          onClick={() => loadData(true)}
+        >
+          <RefreshCw className={cn("size-3.5", isRefreshing && "animate-spin")} />
+          Refresh credentials
+        </Button>
+      </div>
+
+      {/* Security alert */}
+      <div className="flex items-start gap-2.5 rounded-lg border border-amber-200 bg-amber-50/80 p-3 text-amber-900 dark:border-amber-950 dark:bg-amber-950/20 dark:text-amber-200">
+        <ShieldCheck className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+        <div className="text-[11px] leading-5">
+          <b>Restricted access info.</b> These credentials grant direct API access to SuperBlock's message delivery infrastructure and customer WhatsApp Business Accounts. Keep tokens masked during screen sharing.
+        </div>
+      </div>
+
+      {/* Cards Grid */}
+      <div className="grid gap-4 xl:grid-cols-2">
+        {/* Card 1: Meta WhatsApp Cloud API */}
+        <div className="panel p-5">
+          <div className="flex items-center justify-between border-b pb-4">
+            <div className="flex items-center gap-3">
+              <span className="grid size-9 place-items-center rounded-lg border bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400">
+                <Smartphone className="size-4" />
+              </span>
+              <div>
+                <div className="text-sm font-semibold">Meta WhatsApp Cloud API</div>
+                <div className="text-[11px] text-muted-foreground">
+                  Official WhatsApp Business Platform (WABA)
+                </div>
+              </div>
+            </div>
+            <StatusBadge status={metaConfigured ? "Active" : "Partial"} />
+          </div>
+
+          <div className="mt-4 divide-y rounded-lg border bg-muted/10">
+            <CredentialRow
+              label="Phone ID"
+              value={data.meta.businessPhoneNumberId || "Not assigned"}
+              mono={Boolean(data.meta.businessPhoneNumberId)}
+              action={
+                data.meta.businessPhoneNumberId ? (
+                  <CopyButton value={data.meta.businessPhoneNumberId} />
+                ) : null
+              }
+            />
+            <CredentialRow
+              label="WABA ID"
+              value={data.meta.businessAccountId || "Not assigned"}
+              mono={Boolean(data.meta.businessAccountId)}
+              action={
+                data.meta.businessAccountId ? (
+                  <CopyButton value={data.meta.businessAccountId} />
+                ) : null
+              }
+            />
+            <CredentialRow
+              label="App ID"
+              value={data.meta.appId || "Not assigned"}
+              mono={Boolean(data.meta.appId)}
+              action={data.meta.appId ? <CopyButton value={data.meta.appId} /> : null}
+            />
+            <CredentialRow
+              label="Portfolio ID"
+              value={data.meta.businessPortfolioId || "Not assigned"}
+              mono={Boolean(data.meta.businessPortfolioId)}
+              action={
+                data.meta.businessPortfolioId ? (
+                  <CopyButton value={data.meta.businessPortfolioId} />
+                ) : null
+              }
+            />
+            <CredentialRow
+              label="Endpoint"
+              value={data.meta.whatsappEndpoint || "https://api.superblock.chat/sendWhatsappMessage"}
+              mono
+              action={
+                <CopyButton
+                  value={
+                    data.meta.whatsappEndpoint ||
+                    "https://api.superblock.chat/sendWhatsappMessage"
+                  }
+                />
+              }
+            />
+            <CredentialRow
+              label="Graph Token"
+              value={
+                data.meta.hasToken
+                  ? isVisible("meta_token")
+                    ? data.meta.graphApiToken || ""
+                    : "••••••••••••••••••••••••••••••••••••••••"
+                  : "No token configured"
+              }
+              mono
+              action={
+                data.meta.hasToken ? (
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-7"
+                      title={isVisible("meta_token") ? "Hide token" : "Reveal token"}
+                      onClick={() => toggleVisibility("meta_token")}
+                    >
+                      {isVisible("meta_token") ? (
+                        <EyeOff className="size-3.5" />
+                      ) : (
+                        <Eye className="size-3.5" />
+                      )}
+                    </Button>
+                    <CopyButton value={data.meta.graphApiToken || ""} />
+                  </div>
+                ) : null
+              }
+            />
+          </div>
+
+          <div className="mt-3 flex items-center justify-between text-[11px] text-muted-foreground">
+            <span>Permanent System User Token (Meta Cloud API)</span>
+            {data.updatedAt && (
+              <span>Updated {new Date(data.updatedAt).toLocaleDateString()}</span>
+            )}
+          </div>
+        </div>
+
+        {/* Card 2: Superblock Platform Access */}
+        <div className="panel p-5">
+          <div className="flex items-center justify-between border-b pb-4">
+            <div className="flex items-center gap-3">
+              <span className="grid size-9 place-items-center rounded-lg border bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400">
+                <KeyRound className="size-4" />
+              </span>
+              <div>
+                <div className="text-sm font-semibold">Superblock Workspace</div>
+                <div className="text-[11px] text-muted-foreground">
+                  Internal customer management & portal account
+                </div>
+              </div>
+            </div>
+            <StatusBadge status="Active" />
+          </div>
+
+          <div className="mt-4 divide-y rounded-lg border bg-muted/10">
+            <CredentialRow
+              label="Username"
+              value={data.superblock.username}
+              action={<CopyButton value={data.superblock.username} />}
+            />
+            <CredentialRow
+              label="Email"
+              value={data.superblock.email || "—"}
+              action={data.superblock.email ? <CopyButton value={data.superblock.email} /> : null}
+            />
+            <CredentialRow
+              label="Role"
+              value={data.superblock.role || "Admin"}
+              action={null}
+            />
+            <CredentialRow
+              label="Plan"
+              value={data.superblock.plan || "Growth"}
+              action={null}
+            />
+            <CredentialRow
+              label="Portal"
+              value={data.superblock.loginUrl}
+              action={
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-7"
+                    title="Open Superblock portal"
+                    onClick={() => window.open(data.superblock.loginUrl, "_blank")}
+                  >
+                    <ExternalLink className="size-3.5" />
+                  </Button>
+                  <CopyButton value={data.superblock.loginUrl} />
+                </div>
+              }
+            />
+          </div>
+
+          <p className="mt-3 text-[11px] leading-5 text-muted-foreground">
+            Primary administrative credentials for {customer.company} in the SuperBlock platform.
+          </p>
+        </div>
+      </div>
+
+      {/* Connected Channels if any exist */}
+      {(data.channels.facebook || data.channels.instagram || data.channels.shopify) && (
+        <div className="panel p-5">
+          <div className="flex items-center gap-2 border-b pb-3">
+            <Share2 className="size-4 text-muted-foreground" />
+            <h3 className="text-sm font-semibold">Connected Social & Commerce Channels</h3>
+          </div>
+          <div className="mt-4 grid gap-4 md:grid-cols-3">
+            {data.channels.facebook && (
+              <div className="rounded-lg border p-3">
+                <div className="flex items-center justify-between">
+                  <div className="text-xs font-semibold">Facebook Page</div>
+                  <StatusBadge status="Active" />
+                </div>
+                <div className="mt-2 text-[11px] text-muted-foreground">
+                  Page: <span className="text-foreground">{data.channels.facebook.pageName || data.channels.facebook.pageId}</span>
+                </div>
+              </div>
+            )}
+            {data.channels.instagram && (
+              <div className="rounded-lg border p-3">
+                <div className="flex items-center justify-between">
+                  <div className="text-xs font-semibold">Instagram Business</div>
+                  <StatusBadge status="Active" />
+                </div>
+                <div className="mt-2 text-[11px] text-muted-foreground">
+                  Handle: <span className="text-foreground">@{data.channels.instagram.username}</span>
+                </div>
+              </div>
+            )}
+            {data.channels.shopify && (
+              <div className="rounded-lg border p-3">
+                <div className="flex items-center justify-between">
+                  <div className="text-xs font-semibold">Shopify Store</div>
+                  <StatusBadge status="Active" />
+                </div>
+                <div className="mt-2 text-[11px] text-muted-foreground truncate">
+                  Store: <span className="text-foreground">{data.channels.shopify.apiUrl}</span>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Card 3: Developer cURL Dispatch Test */}
+      <div className="panel p-5">
+        <div className="flex items-center justify-between border-b pb-3">
+          <div className="flex items-center gap-2">
+            <Terminal className="size-4 text-muted-foreground" />
+            <div>
+              <div className="text-xs font-semibold">API Integration Verification (cURL)</div>
+              <div className="text-[10px] text-muted-foreground">
+                Run this terminal snippet to verify real-time WhatsApp message dispatch for this customer.
+              </div>
             </div>
           </div>
-          <div className="grid gap-3 xl:grid-cols-2">
-            {credentials.map((credential) => {
-              const shown = visible.includes(credential.id);
-              return (
-                <div className="panel p-4" key={credential.id}>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="grid size-8 place-items-center rounded-lg border bg-muted/35">
-                        <KeyRound className="size-3.5" />
-                      </span>
-                      <div>
-                        <div className="text-xs font-semibold">{credential.type}</div>
-                        <div className="text-[10px] text-muted-foreground">
-                          Updated {credential.updatedAt}
-                        </div>
-                      </div>
-                    </div>
-                    <StatusBadge status="Active" />
-                  </div>
-                  <div className="mt-4 divide-y rounded-lg border">
-                    <CredentialRow
-                      label="Username"
-                      value={credential.username}
-                      action={<CopyButton value={credential.username} />}
-                    />
-                    <CredentialRow
-                      label="Login URL"
-                      value={credential.loginUrl}
-                      action={<CopyButton value={credential.loginUrl} />}
-                    />
-                    <CredentialRow
-                      label="Password"
-                      value={shown ? credential.password : "••••••••••••••"}
-                      mono
-                      action={
-                        <div className="flex">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="size-7"
-                            onClick={() =>
-                              setVisible((items) =>
-                                shown
-                                  ? items.filter((id) => id !== credential.id)
-                                  : [...items, credential.id]
-                              )
-                            }
-                          >
-                            {shown ? (
-                              <EyeOff className="size-3.5" />
-                            ) : (
-                              <Eye className="size-3.5" />
-                            )}
-                          </Button>
-                          <CopyButton value={credential.password} />
-                        </div>
-                      }
-                    />
-                  </div>
-                  <p className="mt-3 text-[11px] leading-5 text-muted-foreground">
-                    {credential.notes}
-                  </p>
-                </div>
-              );
-            })}
-          </div>
-        </>
-      )}
+          <CopyButton value={curlTestSnippet} />
+        </div>
+        <div className="mt-3 overflow-x-auto rounded-lg bg-zinc-950 p-3 text-[11px] font-mono leading-5 text-zinc-200">
+          <pre>{curlTestSnippet}</pre>
+        </div>
+      </div>
     </div>
   );
 }
@@ -2438,19 +2722,20 @@ function CredentialRow({
   mono?: boolean;
 }) {
   return (
-    <div className="flex min-h-10 items-center gap-3 px-3">
-      <span className="w-20 text-[10px] uppercase tracking-wider text-muted-foreground">
+    <div className="flex min-h-10 items-center justify-between gap-3 px-3 py-1.5">
+      <span className="w-24 shrink-0 text-[10px] uppercase tracking-wider text-muted-foreground">
         {label}
       </span>
       <span
         className={cn(
           "min-w-0 flex-1 truncate text-[11px]",
-          mono && "font-mono tracking-wider"
+          mono && "font-mono text-[11px] text-foreground/90"
         )}
+        title={value}
       >
         {value}
       </span>
-      {action}
+      {action && <div className="shrink-0">{action}</div>}
     </div>
   );
 }
