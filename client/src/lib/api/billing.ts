@@ -121,10 +121,13 @@ export async function getCustomerInvoices(
     return Array.isArray(data.invoices) ? data.invoices : [];
   }
 
-  // Production: Try customeranalytics?action=invoices
+  // Production: Primary target is official customeranalyticsdashboard/invoices
   try {
-    const customerApiUrl = `${PRODUCTION_CUSTOMER_BASE}?action=invoices&customerId=${encoded}`;
-    const response = await fetch(customerApiUrl, { method: "GET", headers });
+    const dashboardUrl = `${PRODUCTION_DASHBOARD_BASE}/invoices?customerId=${encoded}`;
+    const response = await fetch(dashboardUrl, {
+      method: "GET",
+      headers,
+    });
     if (response.ok) {
       const data = (await response.json().catch(() => null)) as InvoicesResponse | null;
       if (data?.success && Array.isArray(data.invoices)) {
@@ -132,17 +135,14 @@ export async function getCustomerInvoices(
       }
     }
   } catch (err) {
-    console.warn("Invoices fetch via customeranalytics failed, trying dashboard base:", err);
+    console.warn("Direct fetch from customeranalyticsdashboard/invoices failed, attempting fallback:", err);
   }
 
-  // Fallback to customeranalyticsdashboard/invoices
-  const dashboardUrl = `${PRODUCTION_DASHBOARD_BASE}/invoices?customerId=${encoded}`;
-  const response = await fetch(dashboardUrl, {
-    method: "GET",
-    headers,
-  });
-
+  // Fallback to customeranalytics?action=invoices
+  const customerApiUrl = `${PRODUCTION_CUSTOMER_BASE}?action=invoices&customerId=${encoded}`;
+  const response = await fetch(customerApiUrl, { method: "GET", headers });
   const data = (await response.json().catch(() => null)) as InvoicesResponse | null;
+
   if (!response.ok || !data?.success) {
     throw new Error(data?.error || `Failed to fetch invoices (status ${response.status})`);
   }
@@ -151,7 +151,7 @@ export async function getCustomerInvoices(
 }
 
 /**
- * Fetches subscriptions for a customer from customeranalytics?action=subscriptions or dashboard.
+ * Fetches subscriptions for a customer from customeranalyticsdashboard or customeranalytics.
  */
 export async function getCustomerSubscriptions(
   customerId: string
@@ -173,10 +173,13 @@ export async function getCustomerSubscriptions(
     return Array.isArray(data.subscriptions) ? data.subscriptions : [];
   }
 
-  // Production: Try customeranalytics?action=subscriptions
+  // Production: Primary target is official customeranalyticsdashboard/subscriptions
   try {
-    const customerApiUrl = `${PRODUCTION_CUSTOMER_BASE}?action=subscriptions&customerId=${encoded}`;
-    const response = await fetch(customerApiUrl, { method: "GET", headers });
+    const dashboardUrl = `${PRODUCTION_DASHBOARD_BASE}/subscriptions?customerId=${encoded}`;
+    const response = await fetch(dashboardUrl, {
+      method: "GET",
+      headers,
+    });
     if (response.ok) {
       const data = (await response.json().catch(() => null)) as SubscriptionsResponse | null;
       if (data?.success && Array.isArray(data.subscriptions)) {
@@ -184,17 +187,14 @@ export async function getCustomerSubscriptions(
       }
     }
   } catch (err) {
-    console.warn("Subscriptions fetch via customeranalytics failed, trying dashboard base:", err);
+    console.warn("Direct fetch from customeranalyticsdashboard/subscriptions failed, attempting fallback:", err);
   }
 
-  // Fallback to customeranalyticsdashboard/subscriptions
-  const dashboardUrl = `${PRODUCTION_DASHBOARD_BASE}/subscriptions?customerId=${encoded}`;
-  const response = await fetch(dashboardUrl, {
-    method: "GET",
-    headers,
-  });
-
+  // Fallback to customeranalytics?action=subscriptions
+  const customerApiUrl = `${PRODUCTION_CUSTOMER_BASE}?action=subscriptions&customerId=${encoded}`;
+  const response = await fetch(customerApiUrl, { method: "GET", headers });
   const data = (await response.json().catch(() => null)) as SubscriptionsResponse | null;
+
   if (!response.ok || !data?.success) {
     throw new Error(data?.error || `Failed to fetch subscriptions (status ${response.status})`);
   }
@@ -220,10 +220,13 @@ export async function getBillingProducts(): Promise<ProductRecord[]> {
     return Array.isArray(data.products) ? data.products : [];
   }
 
-  // Production: Try customeranalytics?action=products
+  // Production: Primary target is official customeranalyticsdashboard/products
   try {
-    const customerApiUrl = `${PRODUCTION_CUSTOMER_BASE}?action=products`;
-    const response = await fetch(customerApiUrl, { method: "GET", headers });
+    const dashboardUrl = `${PRODUCTION_DASHBOARD_BASE}/products`;
+    const response = await fetch(dashboardUrl, {
+      method: "GET",
+      headers,
+    });
     if (response.ok) {
       const data = (await response.json().catch(() => null)) as ProductsResponse | null;
       if (data?.success && Array.isArray(data.products)) {
@@ -231,17 +234,14 @@ export async function getBillingProducts(): Promise<ProductRecord[]> {
       }
     }
   } catch (err) {
-    console.warn("Products fetch via customeranalytics failed, trying dashboard base:", err);
+    console.warn("Direct fetch from customeranalyticsdashboard/products failed, attempting fallback:", err);
   }
 
-  // Fallback to customeranalyticsdashboard/products
-  const dashboardUrl = `${PRODUCTION_DASHBOARD_BASE}/products`;
-  const response = await fetch(dashboardUrl, {
-    method: "GET",
-    headers,
-  });
-
+  // Fallback to customeranalytics?action=products
+  const customerApiUrl = `${PRODUCTION_CUSTOMER_BASE}?action=products`;
+  const response = await fetch(customerApiUrl, { method: "GET", headers });
   const data = (await response.json().catch(() => null)) as ProductsResponse | null;
+
   if (!response.ok || !data?.success) {
     throw new Error(data?.error || `Failed to fetch products (status ${response.status})`);
   }

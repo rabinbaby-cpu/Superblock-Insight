@@ -85,10 +85,10 @@ export async function getCustomerMeetings(
     return Array.isArray(data.meetings) ? data.meetings : [];
   }
 
-  // Production: Try customeranalytics?action=meetings first
+  // Production: Primary target is official customeranalyticsdashboard/meetings
   try {
-    const customerApiUrl = `${PRODUCTION_CUSTOMER_BASE}?action=meetings&customerId=${encodeURIComponent(customerId)}`;
-    const response = await fetch(customerApiUrl, { method: "GET", headers });
+    const dashboardUrl = `${PRODUCTION_DASHBOARD_BASE}/meetings?customerId=${encodeURIComponent(customerId)}`;
+    const response = await fetch(dashboardUrl, { method: "GET", headers });
     if (response.ok) {
       const data = (await response.json().catch(() => null)) as MeetingsResponse | null;
       if (data?.success && Array.isArray(data.meetings)) {
@@ -96,12 +96,12 @@ export async function getCustomerMeetings(
       }
     }
   } catch (err) {
-    console.warn("Meetings fetch from customeranalytics failed, trying dashboard base:", err);
+    console.warn("Direct fetch from customeranalyticsdashboard/meetings failed, attempting fallback:", err);
   }
 
-  // Fallback to customeranalyticsdashboard/meetings
-  const dashboardUrl = `${PRODUCTION_DASHBOARD_BASE}/meetings?customerId=${encodeURIComponent(customerId)}`;
-  const response = await fetch(dashboardUrl, { method: "GET", headers });
+  // Fallback to customeranalytics?action=meetings
+  const customerApiUrl = `${PRODUCTION_CUSTOMER_BASE}?action=meetings&customerId=${encodeURIComponent(customerId)}`;
+  const response = await fetch(customerApiUrl, { method: "GET", headers });
   const data = (await response.json().catch(() => null)) as MeetingsResponse | null;
 
   if (!response.ok || !data?.success) {
@@ -155,10 +155,9 @@ export async function createCustomerMeeting(input: {
     return data.meeting;
   }
 
-  // Production: Try customeranalytics with action=create_meeting
+  // Production: Primary target is official customeranalyticsdashboard/meetings
   try {
-    const customerApiUrl = `${PRODUCTION_CUSTOMER_BASE}?action=create_meeting`;
-    const response = await fetch(customerApiUrl, {
+    const response = await fetch(`${PRODUCTION_DASHBOARD_BASE}/meetings`, {
       method: "POST",
       headers,
       body: JSON.stringify(payload),
@@ -168,11 +167,12 @@ export async function createCustomerMeeting(input: {
       return data.meeting;
     }
   } catch (err) {
-    console.warn("POST meeting to customeranalytics failed, trying dashboard base:", err);
+    console.warn("POST to customeranalyticsdashboard/meetings failed, attempting fallback:", err);
   }
 
-  // Fallback to customeranalyticsdashboard/meetings
-  const response = await fetch(`${PRODUCTION_DASHBOARD_BASE}/meetings`, {
+  // Fallback to customeranalytics with action=create_meeting
+  const customerApiUrl = `${PRODUCTION_CUSTOMER_BASE}?action=create_meeting`;
+  const response = await fetch(customerApiUrl, {
     method: "POST",
     headers,
     body: JSON.stringify(payload),
