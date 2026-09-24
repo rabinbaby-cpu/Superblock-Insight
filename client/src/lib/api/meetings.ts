@@ -79,15 +79,21 @@ export async function getCustomerMeetings(
   const headers = await authHeaders();
 
   if (isLocalhost()) {
-    const response = await fetch(
-      `/api/meetings?customerId=${encodeURIComponent(customerId)}`,
-      { method: "GET", headers }
-    );
-    const data = (await response.json().catch(() => null)) as MeetingsResponse | null;
-    if (!response.ok || !data?.success) {
-      throw new Error(data?.error || `Failed to fetch meetings (status ${response.status})`);
+    try {
+      const response = await fetch(
+        `/api/meetings?customerId=${encodeURIComponent(customerId)}`,
+        { method: "GET", headers }
+      );
+      if (response.ok) {
+        const data = (await response.json().catch(() => null)) as MeetingsResponse | null;
+        if (data?.success && Array.isArray(data.meetings)) {
+          return data.meetings;
+        }
+      }
+    } catch (err) {
+      console.warn("Local meetings fetch failed (database offline), using fallback:", err);
     }
-    return Array.isArray(data.meetings) ? data.meetings : [];
+    return [];
   }
 
   // Production Strategy 1: Path-based on customeranalyticsdashaboard/meetings

@@ -18,6 +18,7 @@ import { AppShell } from "@/components/AppShell";
 import {
   Avatar,
   PageHeader,
+  StatusBadge,
   TableSearch,
   downloadCsv,
 } from "@/components/dashboard-ui";
@@ -72,25 +73,68 @@ export default function Users() {
   const [selected, setSelected] = useState<string[]>([]);
 
   const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const compactQ = q.replace(/[^a-z0-9]/g, "");
+
     const rows = customers.filter((customer) => {
-      const matchesQuery = `${customer.company} ${customer.id} ${customer.contact.name} ${customer.contact.email} ${customer.contact.phone}`
-        .toLowerCase()
-        .includes(query.toLowerCase());
+      const companyLower = (customer.company || "").toLowerCase();
+      const companyCompact = companyLower.replace(/[^a-z0-9]/g, "");
+      const idLower = (customer.id || "").toLowerCase();
+      const idCompact = idLower.replace(/[^a-z0-9]/g, "");
+      const contactName = (customer.contact?.name || "").toLowerCase();
+      const contactEmail = (customer.contact?.email || "").toLowerCase();
+      const emailUserPart = contactEmail.split("@")[0] || "";
+      const matchesEmail = q.includes("@")
+        ? contactEmail.includes(q)
+        : emailUserPart.includes(q);
+      const contactPhone = (customer.contact?.phone || "").toLowerCase();
+      const industry = (customer.industry || "").toLowerCase();
+      const region = (customer.region || "").toLowerCase();
+      const planName = (customer.plan || "").toLowerCase();
+
+      const matchesQuery =
+        !q ||
+        companyLower.includes(q) ||
+        companyCompact.includes(compactQ) ||
+        idLower.includes(q) ||
+        idCompact.includes(compactQ) ||
+        contactName.includes(q) ||
+        matchesEmail ||
+        contactPhone.includes(q) ||
+        industry.includes(q) ||
+        region.includes(q) ||
+        planName.includes(q);
+
       return (
         matchesQuery &&
         (status === "All statuses" || (customer.status as string) === status) &&
         (plan === "All plans" || customer.plan === plan) &&
-        (health === "All health" || (customer.health.status as string) === health)
+        (health === "All health" || (customer.health?.status as string) === health)
       );
     });
+
     return rows.sort((a, b) => {
+      if (q) {
+        const aComp = (a.company || "").toLowerCase();
+        const bComp = (b.company || "").toLowerCase();
+        const aExact = aComp === q;
+        const bExact = bComp === q;
+        if (aExact !== bExact) return aExact ? -1 : 1;
+
+        const aStarts = aComp.startsWith(q);
+        const bStarts = bComp.startsWith(q);
+        if (aStarts !== bStarts) return aStarts ? -1 : 1;
+      }
       const values: Record<SortKey, [string | number, string | number]> = {
         company: [a.company, b.company],
         activatedAt: [a.activatedAt, b.activatedAt],
         renewal: [a.renewal, b.renewal],
-        mrr: [a.subscription.mrr, b.subscription.mrr],
-        usage: [a.usage.contacts || a.usage.messages, b.usage.contacts || b.usage.messages],
-        health: [a.health.score, b.health.score],
+        mrr: [a.subscription?.mrr ?? 0, b.subscription?.mrr ?? 0],
+        usage: [
+          (a.usage?.contacts || a.usage?.messages) ?? 0,
+          (b.usage?.contacts || b.usage?.messages) ?? 0,
+        ],
+        health: [a.health?.score ?? 0, b.health?.score ?? 0],
       };
       const [left, right] = values[sortKey];
       const result =
@@ -378,16 +422,16 @@ export default function Users() {
               </tr>
             </thead>
             <tbody>
-              {loading ? (
+              {loading && filtered.length === 0 ? (
                 <tr>
                   <td colSpan={visible.length + 2} className="py-14 text-center text-muted-foreground">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <Loader2 className="size-5 animate-spin text-primary" />
-                      <span className="text-xs">Loading user directory from API…</span>
+                      <span className="text-xs">Loading user directory…</span>
                     </div>
                   </td>
                 </tr>
-              ) : error ? (
+              ) : error && filtered.length === 0 ? (
                 <tr>
                   <td colSpan={visible.length + 2} className="py-12 text-center text-destructive">
                     <div className="flex flex-col items-center justify-center gap-2">
@@ -562,12 +606,22 @@ function UserRow({
       )}
       {isVisible("Subscription") && (
         <td>
-          <span className="text-muted-foreground">—</span>
+          {customer.status ? (
+            <StatusBadge status={customer.status} />
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          )}
         </td>
       )}
       {isVisible("Plan") && (
         <td>
-          <span className="text-muted-foreground">—</span>
+          {customer.plan && customer.plan !== "—" ? (
+            <span className="rounded-md border bg-muted/30 px-2 py-1 text-[11px] font-medium">
+              {customer.plan}
+            </span>
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          )}
         </td>
       )}
       {isVisible("Renewal") && (

@@ -86,20 +86,23 @@ export async function getCustomerNotes(
 
   const headers = await getAuthHeaders();
 
-  // Local development: use Express proxy
+  // Local development: use Express proxy with safe fallback
   if (isLocalhost()) {
-    const res = await fetch(
-      `/api/notes?customerId=${encodeURIComponent(customerId)}`,
-      { method: "GET", headers }
-    );
-    if (!res.ok) {
-      const errBody = await res.text().catch(() => "");
-      throw new Error(
-        `Failed to fetch notes (${res.status}): ${errBody || res.statusText}`
+    try {
+      const res = await fetch(
+        `/api/notes?customerId=${encodeURIComponent(customerId)}`,
+        { method: "GET", headers }
       );
+      if (res.ok) {
+        const data = (await res.json().catch(() => null)) as GetNotesResponse | null;
+        if (Array.isArray(data?.notes)) {
+          return data.notes;
+        }
+      }
+    } catch (err) {
+      console.warn("Local notes fetch failed (database offline), using fallback:", err);
     }
-    const data = (await res.json().catch(() => null)) as GetNotesResponse | null;
-    return Array.isArray(data?.notes) ? data.notes : [];
+    return [];
   }
 
   // Production Strategy 1: Path-based on customeranalyticsdashaboard/notes

@@ -129,7 +129,7 @@ import {
   type Note,
   type Offering,
 } from "@/data/mockData";
-import { useCustomerAnalytics } from "@/lib/api/customerAnalytics";
+import { useCustomerAnalytics, defaultAllCustomers } from "@/lib/api/customerAnalytics";
 import { useCustomerProfile } from "@/lib/api/customerProfile";
 import { fetchAuthSession } from "aws-amplify/auth";
 import { toast } from "sonner";
@@ -189,8 +189,20 @@ export default function CustomerDetail() {
   const [invoice, setInvoice] = useState<Invoice | null>(null);
 
   const rawCustomer = useMemo(() => {
+    const list = apiCustomers.length > 0 ? apiCustomers : defaultAllCustomers;
     return (
-      apiCustomers.find((item) => item.id === params.id) ||
+      list.find(
+        (item) =>
+          item.id === params.id ||
+          item.id.toLowerCase() === params.id?.toLowerCase() ||
+          item.company?.toLowerCase() === params.id?.toLowerCase()
+      ) ||
+      defaultAllCustomers.find(
+        (item) =>
+          item.id === params.id ||
+          item.id.toLowerCase() === params.id?.toLowerCase() ||
+          item.company?.toLowerCase() === params.id?.toLowerCase()
+      ) ||
       fallbackCustomers.find((item) => item.id === params.id) ||
       null
     );

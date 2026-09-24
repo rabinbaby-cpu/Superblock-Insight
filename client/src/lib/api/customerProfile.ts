@@ -100,6 +100,9 @@ export async function fetchCustomerProfile(
         throw new Error("No active Cognito authentication token found.");
       }
 
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
+
       const res = await fetch(
         `https://api.superblock.chat/profile?userId=${encodeURIComponent(userId)}`,
         {
@@ -107,8 +110,9 @@ export async function fetchCustomerProfile(
           headers: {
             Authorization: `Bearer ${token}`,
           },
+          signal: controller.signal,
         }
-      );
+      ).finally(() => clearTimeout(timeoutId));
 
       if (!res.ok) {
         return null;

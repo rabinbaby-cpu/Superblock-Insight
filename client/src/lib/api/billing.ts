@@ -115,15 +115,21 @@ export async function getCustomerInvoices(
   const encoded = encodeURIComponent(customerId);
 
   if (isLocalhost()) {
-    const response = await fetch(`/api/invoices?customerId=${encoded}`, {
-      method: "GET",
-      headers,
-    });
-    const data = (await response.json().catch(() => null)) as InvoicesResponse | null;
-    if (!response.ok || !data?.success) {
-      throw new Error(data?.error || `Failed to fetch invoices (status ${response.status})`);
+    try {
+      const response = await fetch(`/api/invoices?customerId=${encoded}`, {
+        method: "GET",
+        headers,
+      });
+      if (response.ok) {
+        const data = (await response.json().catch(() => null)) as InvoicesResponse | null;
+        if (data?.success && Array.isArray(data.invoices)) {
+          return data.invoices;
+        }
+      }
+    } catch (err) {
+      console.warn("Local invoices fetch failed (database offline), using fallback:", err);
     }
-    return Array.isArray(data.invoices) ? data.invoices : [];
+    return [];
   }
 
   // Production Strategy 1: Path-based on customeranalyticsdashaboard/invoices
