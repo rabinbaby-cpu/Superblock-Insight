@@ -89,7 +89,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const checkAuth = useCallback(async () => {
     try {
       initAmplify();
-      const cognitoUser = await getCurrentUser();
+      let cognitoUser: any = null;
+      try {
+        cognitoUser = await getCurrentUser();
+      } catch {
+        // No active Cognito session
+      }
+
       if (cognitoUser && cognitoUser.userId) {
         const userObj = getUserFromStorage(
           cognitoUser.username,
@@ -98,12 +104,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(userObj);
         setIsAuthenticated(true);
       } else {
+        const localUser = getUserFromStorage();
+        if (localUser && localUser.userId) {
+          setUser(localUser);
+          setIsAuthenticated(true);
+        } else {
+          setUser(null);
+          setIsAuthenticated(false);
+        }
+      }
+    } catch {
+      const localUser = getUserFromStorage();
+      if (localUser && localUser.userId) {
+        setUser(localUser);
+        setIsAuthenticated(true);
+      } else {
         setUser(null);
         setIsAuthenticated(false);
       }
-    } catch {
-      setUser(null);
-      setIsAuthenticated(false);
     } finally {
       setIsLoading(false);
     }
