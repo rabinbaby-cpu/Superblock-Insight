@@ -444,15 +444,11 @@ export default function CustomerDetail() {
       // 1. Activities
       if (Array.isArray(realOperations.activities) && realOperations.activities.length > 0) {
         activities = realOperations.activities;
-      } else {
-        activities = [];
       }
 
       // 2. Products / Offerings
       if (Array.isArray(realOperations.products) && realOperations.products.length > 0) {
         offerings = realOperations.products;
-      } else {
-        offerings = [];
       }
 
       // 3. Tasks & Tickets -> Notes
@@ -528,8 +524,6 @@ export default function CustomerDetail() {
       const combinedNotes = [...dbNotes, ...taskNotes, ...ticketNotes];
       if (combinedNotes.length > 0) {
         notes = combinedNotes;
-      } else {
-        notes = [];
       }
 
       // 4. Deals -> Invoices & Commercial Terms
@@ -1497,21 +1491,25 @@ function Offerings({
 
   // Combine real database offerings with customer prop fallback
   const offerings: Offering[] = useMemo(() => {
-    if (dbOfferings.length > 0) {
-      return dbOfferings.map((co) => ({
-        id: co.id,
-        name: co.offering_name || "Custom Offering",
-        description: `Provisioned service for ${customer.company}`,
-        status: (co.status as any) || "Active",
-        startDate: co.start_date ? new Date(co.start_date).toLocaleDateString() : "Active",
-        expiryDate: co.end_date ? new Date(co.end_date).toLocaleDateString() : "Ongoing",
-        quantity: "1 unit",
-        pricing: "Enterprise",
-        notes: "Provisioned via Analytics Studio",
-        owner: "SuperBlock Platform",
-      }));
+    const listFromDb: Offering[] = dbOfferings.map((co) => ({
+      id: co.id,
+      name: co.offering_name || "Custom Offering",
+      description: `Provisioned service for ${customer.company}`,
+      status: (co.status as any) || "Active",
+      startDate: co.start_date ? new Date(co.start_date).toLocaleDateString() : "Active",
+      expiryDate: co.end_date ? new Date(co.end_date).toLocaleDateString() : "Ongoing",
+      quantity: "1 unit",
+      pricing: "Enterprise",
+      notes: "Provisioned via Analytics Studio",
+      owner: "SuperBlock Platform",
+    }));
+
+    const baseOfferings = customer.offerings || [];
+    if (listFromDb.length > 0) {
+      const dbIds = new Set(listFromDb.map((o) => o.id));
+      return [...listFromDb, ...baseOfferings.filter((b) => !dbIds.has(b.id))];
     }
-    return customer.offerings || [];
+    return baseOfferings;
   }, [dbOfferings, customer.offerings, customer.company]);
 
   return (
@@ -1660,14 +1658,13 @@ function Notes({ customer }: { customer: Customer }) {
           }) : "—"),
     }));
 
+    const baseNotes = customer.notes || [];
     if (realList.length > 0) {
-      const taskTicketNotes = (customer.notes || []).filter(
-        (cn) => cn.category === "Technical" || cn.category === "Support"
-      );
-      return [...realList, ...taskTicketNotes];
+      const realIds = new Set(realList.map((n) => n.id));
+      return [...realList, ...baseNotes.filter((bn) => !realIds.has(bn.id))];
     }
 
-    return customer.notes || [];
+    return baseNotes;
   }, [dbNotes, customer.notes]);
 
   const handleDelete = async (noteId: string) => {

@@ -103,6 +103,34 @@ async function authHeaders(): Promise<Record<string, string>> {
   return headers;
 }
 
+function getLocalInvoicesKey(customerId: string): string {
+  return `sb_invoices_${customerId}`;
+}
+
+export function getLocalInvoices(customerId: string): InvoiceRecord[] {
+  if (typeof window === "undefined" || !customerId) return [];
+  try {
+    const raw = localStorage.getItem(getLocalInvoicesKey(customerId));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveLocalInvoice(customerId: string, invoice: InvoiceRecord): void {
+  if (typeof window === "undefined" || !customerId) return;
+  try {
+    const existing = getLocalInvoices(customerId);
+    const updated = [invoice, ...existing.filter((i) => i.id !== invoice.id)];
+    localStorage.setItem(getLocalInvoicesKey(customerId), JSON.stringify(updated));
+    window.dispatchEvent(new CustomEvent("customer-invoice-created", { detail: { customerId, invoice } }));
+  } catch (err) {
+    console.warn("Could not save invoice to localStorage:", err);
+  }
+}
+
 /**
  * Fetches invoices for a customer from customeranalytics?action=invoices or dashboard.
  */
@@ -114,6 +142,8 @@ export async function getCustomerInvoices(
   const headers = await authHeaders();
   const encoded = encodeURIComponent(customerId);
 
+  let serverInvoices: InvoiceRecord[] = [];
+
   if (isLocalhost()) {
     try {
       const response = await fetch(`/api/invoices?customerId=${encoded}`, {
@@ -123,13 +153,15 @@ export async function getCustomerInvoices(
       if (response.ok) {
         const data = (await response.json().catch(() => null)) as InvoicesResponse | null;
         if (data?.success && Array.isArray(data.invoices)) {
-          return data.invoices;
+          serverInvoices = data.invoices;
         }
       }
     } catch (err) {
       console.warn("Local invoices fetch failed (database offline), using fallback:", err);
     }
-    return [];
+    const local = getLocalInvoices(customerId);
+    const serverIds = new Set(serverInvoices.map((i) => i.id));
+    return [...local.filter((l) => !serverIds.has(l.id)), ...serverInvoices];
   }
 
   // Production Strategy 1: Path-based on customeranalyticsdashaboard/invoices
@@ -323,16 +355,37 @@ export async function createCustomerInvoice(input: {
   };
 
   if (isLocalhost()) {
-    const response = await fetch("/api/invoices", {
-      method: "POST",
-      headers,
-      body: JSON.stringify(payload),
-    });
-    const data = await response.json().catch(() => null);
-    if (!response.ok || !data?.success || !data.invoice) {
-      throw new Error(data?.error || `Failed to create invoice (status ${response.status})`);
+    try {
+      const response = await fetch("/api/invoices", {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload),
+      });
+      const data = await response.json().catch(() => null);
+      if (response.ok && data?.success && data.invoice) {
+        saveLocalInvoice(input.customerId, data.invoice);
+        return data.invoice;
+      }
+    } catch (err) {
+      console.warn("Local create invoice failed (database offline), persisting locally:", err);
     }
-    return data.invoice;
+
+    const fallbackRecord: InvoiceRecord = {
+      id: `local-inv-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      customer_id: input.customerId,
+      invoice_number: input.invoiceNumber || `INV-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
+      status: input.status || "draft",
+      amount: input.amount || 0,
+      currency: input.currency || "USD",
+      issue_date: input.issueDate || new Date().toISOString(),
+      due_date: input.dueDate || new Date(Date.now() + 30 * 86400000).toISOString(),
+      paid_date: null,
+      description: input.description || null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    saveLocalInvoice(input.customerId, fallbackRecord);
+    return fallbackRecord;
   }
 
   // Production Strategy 1: Path-based

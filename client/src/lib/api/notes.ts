@@ -76,6 +76,73 @@ async function getAuthHeaders(
   return headers;
 }
 
+function getLocalNotesKey(customerId: string): string {
+  return `sb_notes_${customerId}`;
+}
+
+export function getLocalNotes(customerId: string): NoteRecord[] {
+  if (typeof window === "undefined" || !customerId) return [];
+  try {
+    const raw = localStorage.getItem(getLocalNotesKey(customerId));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveLocalNote(customerId: string, note: NoteRecord): void {
+  if (typeof window === "undefined" || !customerId) return;
+  try {
+    const existing = getLocalNotes(customerId);
+    const updated = [note, ...existing.filter((n) => n.id !== note.id)];
+    localStorage.setItem(getLocalNotesKey(customerId), JSON.stringify(updated));
+    window.dispatchEvent(new CustomEvent("customer-note-created", { detail: { customerId, note } }));
+  } catch (err) {
+    console.warn("Could not save note to localStorage:", err);
+  }
+}
+
+export function updateLocalNote(
+  customerId: string,
+  noteId: string,
+  updates: { title?: string | null; content?: string }
+): NoteRecord | null {
+  if (typeof window === "undefined" || !customerId) return null;
+  try {
+    const existing = getLocalNotes(customerId);
+    let updatedNote: NoteRecord | null = null;
+    const updatedList = existing.map((n) => {
+      if (n.id === noteId) {
+        updatedNote = {
+          ...n,
+          title: updates.title !== undefined ? updates.title : n.title,
+          content: updates.content !== undefined ? updates.content : n.content,
+          updated_at: new Date().toISOString(),
+        };
+        return updatedNote;
+      }
+      return n;
+    });
+    localStorage.setItem(getLocalNotesKey(customerId), JSON.stringify(updatedList));
+    window.dispatchEvent(new CustomEvent("customer-note-created", { detail: { customerId, noteId } }));
+    return updatedNote;
+  } catch {
+    return null;
+  }
+}
+
+export function removeLocalNote(customerId: string, noteId: string): void {
+  if (typeof window === "undefined" || !customerId) return;
+  try {
+    const existing = getLocalNotes(customerId);
+    const filtered = existing.filter((n) => n.id !== noteId);
+    localStorage.setItem(getLocalNotesKey(customerId), JSON.stringify(filtered));
+    window.dispatchEvent(new CustomEvent("customer-note-created", { detail: { customerId, noteId } }));
+  } catch {}
+}
+
 /**
  * Fetches customer notes using the exact same authentication and routing pattern as customerAnalytics.
  */
@@ -88,6 +155,7 @@ export async function getCustomerNotes(
 
   // Local development: use Express proxy with safe fallback
   if (isLocalhost()) {
+    let serverNotes: NoteRecord[] = [];
     try {
       const res = await fetch(
         `/api/notes?customerId=${encodeURIComponent(customerId)}`,
@@ -96,13 +164,15 @@ export async function getCustomerNotes(
       if (res.ok) {
         const data = (await res.json().catch(() => null)) as GetNotesResponse | null;
         if (Array.isArray(data?.notes)) {
-          return data.notes;
+          serverNotes = data.notes;
         }
       }
     } catch (err) {
       console.warn("Local notes fetch failed (database offline), using fallback:", err);
     }
-    return [];
+    const local = getLocalNotes(customerId);
+    const serverIds = new Set(serverNotes.map((n) => n.id));
+    return [...local.filter((l) => !serverIds.has(l.id)), ...serverNotes];
   }
 
   // Production Strategy 1: Path-based on customeranalyticsdashaboard/notes
@@ -175,19 +245,36 @@ export async function createCustomerNote(input: {
   };
 
   if (isLocalhost()) {
-    const res = await fetch("/api/notes", {
-      method: "POST",
-      headers,
-      body: JSON.stringify(payload),
-    });
-    const data = (await res.json().catch(() => null)) as MutateNoteResponse | null;
-    if (!res.ok || !data?.success) {
-      throw new Error(data?.error || `Failed to create note (${res.status})`);
+    try {
+      const res = await fetch("/api/notes", {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload),
+      });
+      const data = (await res.json().catch(() => null)) as MutateNoteResponse | null;
+      if (res.ok && data?.success && data?.note) {
+        saveLocalNote(input.customerId, data.note);
+        return data.note;
+      }
+      if (!res.ok) {
+        console.warn(`Local /api/notes returned ${res.status} (${data?.error || "network error"}), falling back to local storage.`);
+      }
+    } catch (err: any) {
+      console.warn("Local POST /api/notes failed with network error, saving to local storage fallback:", err?.message || err);
     }
-    if (!data.note) {
-      throw new Error("Backend did not return created note record");
-    }
-    return data.note;
+
+    // Offline / DB maintenance fallback: persist directly to localStorage
+    const localNote: NoteRecord = {
+      id: `local-note-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      customer_id: input.customerId,
+      title: input.title?.trim() || "Customer Note",
+      content: input.content.trim(),
+      created_by: input.createdBy || "Admin User",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    saveLocalNote(input.customerId, localNote);
+    return localNote;
   }
 
   // Production Strategy 1: Primary target is official customeranalyticsdashaboard/notes
@@ -260,19 +347,42 @@ export async function updateCustomerNote(
   };
 
   if (isLocalhost()) {
-    const res = await fetch(`/api/notes/${encodeURIComponent(noteId)}`, {
-      method: "PUT",
-      headers,
-      body: JSON.stringify(payload),
-    });
-    const data = (await res.json().catch(() => null)) as MutateNoteResponse | null;
-    if (!res.ok || !data?.success) {
-      throw new Error(data?.error || `Failed to update note (${res.status})`);
+    try {
+      const res = await fetch(`/api/notes/${encodeURIComponent(noteId)}`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify(payload),
+      });
+      const data = (await res.json().catch(() => null)) as MutateNoteResponse | null;
+      if (res.ok && data?.success && data?.note) {
+        return data.note;
+      }
+    } catch (err) {
+      console.warn("Local update note failed (database offline), applying to local storage:", err);
     }
-    if (!data.note) {
-      throw new Error("Backend did not return updated note record");
+    // Fallback: update any matching note in localStorage
+    if (typeof window !== "undefined") {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key?.startsWith("sb_notes_")) {
+          const custId = key.replace("sb_notes_", "");
+          const updated = updateLocalNote(custId, noteId, {
+            title: input.title,
+            content: input.content,
+          });
+          if (updated) return updated;
+        }
+      }
     }
-    return data.note;
+    return {
+      id: noteId,
+      customer_id: "",
+      title: input.title?.trim() || null,
+      content: input.content?.trim() || "",
+      created_by: "Admin User",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
   }
 
   // Production Strategy 1: Primary target is official customeranalyticsdashaboard/notes/:id
@@ -336,13 +446,35 @@ export async function deleteCustomerNote(noteId: string): Promise<boolean> {
   const headers = await getAuthHeaders();
 
   if (isLocalhost()) {
-    const res = await fetch(`/api/notes/${encodeURIComponent(noteId)}`, {
-      method: "DELETE",
-      headers,
-    });
-    const data = (await res.json().catch(() => null)) as MutateNoteResponse | null;
-    if (!res.ok || !data?.success) {
-      throw new Error(data?.error || `Failed to delete note (${res.status})`);
+    try {
+      const res = await fetch(`/api/notes/${encodeURIComponent(noteId)}`, {
+        method: "DELETE",
+        headers,
+      });
+      const data = (await res.json().catch(() => null)) as MutateNoteResponse | null;
+      if (res.ok && data?.success) {
+        // success
+      }
+    } catch (err) {
+      console.warn("Local delete note failed (database offline), removing from local storage:", err);
+    }
+    // Also remove from any customer's localStorage
+    if (typeof window !== "undefined") {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key?.startsWith("sb_notes_")) {
+          const raw = localStorage.getItem(key);
+          if (raw && raw.includes(noteId)) {
+            try {
+              const list = JSON.parse(raw);
+              const filtered = list.filter((n: any) => n.id !== noteId);
+              localStorage.setItem(key, JSON.stringify(filtered));
+              const custId = key.replace("sb_notes_", "");
+              window.dispatchEvent(new CustomEvent("customer-note-created", { detail: { customerId: custId, noteId } }));
+            } catch {}
+          }
+        }
+      }
     }
     return true;
   }

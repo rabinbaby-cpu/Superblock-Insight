@@ -69,6 +69,44 @@ function isLocalhost(): boolean {
   );
 }
 
+function getLocalMeetingsKey(customerId: string): string {
+  return `sb_meetings_${customerId}`;
+}
+
+export function getLocalMeetings(customerId: string): MeetingRecord[] {
+  if (typeof window === "undefined" || !customerId) return [];
+  try {
+    const raw = localStorage.getItem(getLocalMeetingsKey(customerId));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveLocalMeeting(customerId: string, meeting: MeetingRecord): void {
+  if (typeof window === "undefined" || !customerId) return;
+  try {
+    const existing = getLocalMeetings(customerId);
+    const updated = [meeting, ...existing.filter((m) => m.id !== meeting.id)];
+    localStorage.setItem(getLocalMeetingsKey(customerId), JSON.stringify(updated));
+    window.dispatchEvent(new CustomEvent("customer-meeting-created", { detail: { customerId, meeting } }));
+  } catch (err) {
+    console.warn("Could not save meeting to localStorage:", err);
+  }
+}
+
+export function removeLocalMeeting(customerId: string, meetingId: string): void {
+  if (typeof window === "undefined" || !customerId) return;
+  try {
+    const existing = getLocalMeetings(customerId);
+    const filtered = existing.filter((m) => m.id !== meetingId);
+    localStorage.setItem(getLocalMeetingsKey(customerId), JSON.stringify(filtered));
+    window.dispatchEvent(new CustomEvent("customer-meeting-created", { detail: { customerId, meetingId } }));
+  } catch {}
+}
+
 export async function getCustomerMeetings(
   customerId: string
 ): Promise<MeetingRecord[]> {
@@ -77,6 +115,8 @@ export async function getCustomerMeetings(
   }
 
   const headers = await authHeaders();
+
+  let serverMeetings: MeetingRecord[] = [];
 
   if (isLocalhost()) {
     try {
@@ -87,13 +127,15 @@ export async function getCustomerMeetings(
       if (response.ok) {
         const data = (await response.json().catch(() => null)) as MeetingsResponse | null;
         if (data?.success && Array.isArray(data.meetings)) {
-          return data.meetings;
+          serverMeetings = data.meetings;
         }
       }
     } catch (err) {
       console.warn("Local meetings fetch failed (database offline), using fallback:", err);
     }
-    return [];
+    const local = getLocalMeetings(customerId);
+    const serverIds = new Set(serverMeetings.map((m) => m.id));
+    return [...local.filter((l) => !serverIds.has(l.id)), ...serverMeetings];
   }
 
   // Production Strategy 1: Path-based on customeranalyticsdashaboard/meetings
@@ -168,16 +210,36 @@ export async function createCustomerMeeting(input: {
   };
 
   if (isLocalhost()) {
-    const response = await fetch("/api/meetings", {
-      method: "POST",
-      headers,
-      body: JSON.stringify(payload),
-    });
-    const data = (await response.json().catch(() => null)) as CreateMeetingResponse | null;
-    if (!response.ok || !data?.success || !data.meeting) {
-      throw new Error(data?.error || `Failed to create meeting (status ${response.status})`);
+    try {
+      const response = await fetch("/api/meetings", {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload),
+      });
+      const data = (await response.json().catch(() => null)) as CreateMeetingResponse | null;
+      if (response.ok && data?.success && data.meeting) {
+        saveLocalMeeting(input.customerId, data.meeting);
+        return data.meeting;
+      }
+    } catch (err) {
+      console.warn("Local create meeting failed (database offline), persisting locally:", err);
     }
-    return data.meeting;
+
+    const fallbackRecord: MeetingRecord = {
+      id: `local-meeting-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      customer_id: input.customerId,
+      title: input.title.trim(),
+      description: input.description?.trim() || null,
+      meeting_date: input.meetingDate || new Date().toISOString(),
+      duration_minutes: input.durationMinutes ?? 30,
+      status: input.status || "scheduled",
+      meeting_url: input.meetingUrl || null,
+      created_by: input.createdBy || "Admin User",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    saveLocalMeeting(input.customerId, fallbackRecord);
+    return fallbackRecord;
   }
 
   // Production Strategy 1: Path-based on customeranalyticsdashaboard/meetings
@@ -250,16 +312,32 @@ export async function updateCustomerMeeting(
   };
 
   if (isLocalhost()) {
-    const res = await fetch(`/api/meetings/${encodeURIComponent(meetingId)}`, {
-      method: "PUT",
-      headers,
-      body: JSON.stringify(payload),
-    });
-    const data = await res.json().catch(() => null);
-    if (!res.ok || !data?.success || !data.meeting) {
-      throw new Error(data?.error || `Failed to update meeting (${res.status})`);
+    try {
+      const res = await fetch(`/api/meetings/${encodeURIComponent(meetingId)}`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success && data.meeting) {
+        return data.meeting;
+      }
+    } catch (err) {
+      console.warn("Local update meeting failed (database offline), updating locally:", err);
     }
-    return data.meeting;
+    return {
+      id: meetingId,
+      customer_id: "",
+      title: input.title || "Meeting",
+      description: input.description || null,
+      meeting_date: input.meetingDate || null,
+      duration_minutes: input.durationMinutes ?? null,
+      status: input.status || "scheduled",
+      meeting_url: input.meetingUrl || null,
+      created_by: "Admin User",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
   }
 
   // Production Strategy 1: Path-based
@@ -298,13 +376,34 @@ export async function deleteCustomerMeeting(meetingId: string): Promise<boolean>
   const headers = await authHeaders();
 
   if (isLocalhost()) {
-    const res = await fetch(`/api/meetings/${encodeURIComponent(meetingId)}`, {
-      method: "DELETE",
-      headers,
-    });
-    const data = await res.json().catch(() => null);
-    if (!res.ok || !data?.success) {
-      throw new Error(data?.error || `Failed to delete meeting (${res.status})`);
+    try {
+      const res = await fetch(`/api/meetings/${encodeURIComponent(meetingId)}`, {
+        method: "DELETE",
+        headers,
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success) {
+        // success
+      }
+    } catch (err) {
+      console.warn("Local delete meeting failed (database offline), cleaning up locally:", err);
+    }
+    if (typeof window !== "undefined") {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key?.startsWith("sb_meetings_")) {
+          const raw = localStorage.getItem(key);
+          if (raw && raw.includes(meetingId)) {
+            try {
+              const list = JSON.parse(raw);
+              const filtered = list.filter((m: any) => m.id !== meetingId);
+              localStorage.setItem(key, JSON.stringify(filtered));
+              const custId = key.replace("sb_meetings_", "");
+              window.dispatchEvent(new CustomEvent("customer-meeting-created", { detail: { customerId: custId, meetingId } }));
+            } catch {}
+          }
+        }
+      }
     }
     return true;
   }
