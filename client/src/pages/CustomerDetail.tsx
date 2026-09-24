@@ -69,6 +69,10 @@ import {
   type CustomerCredentialsData,
 } from "@/lib/api/credentials";
 import {
+  getCustomerOfferings,
+  type CustomerOfferingRecord,
+} from "@/lib/api/offerings";
+import {
   ShieldCheck,
   Terminal,
   ExternalLink,
@@ -1447,22 +1451,76 @@ function Offerings({
   customer: Customer;
   onOpen: (offering: Offering) => void;
 }) {
-  const offerings = customer.offerings || [];
+  const [dbOfferings, setDbOfferings] = useState<CustomerOfferingRecord[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const fetchOfferings = useCallback(async () => {
+    if (!customer?.id) return;
+    setLoading(true);
+    try {
+      const records = await getCustomerOfferings(customer.id);
+      if (Array.isArray(records)) {
+        setDbOfferings(records);
+      }
+    } catch (err) {
+      console.error("Error fetching offerings:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [customer?.id]);
+
+  useEffect(() => {
+    fetchOfferings();
+  }, [fetchOfferings]);
+
+  useEffect(() => {
+    const handleCreated = (e: any) => {
+      if (e?.detail?.customerId === customer.id) {
+        fetchOfferings();
+      }
+    };
+    window.addEventListener("customer-offering-created", handleCreated);
+    return () => window.removeEventListener("customer-offering-created", handleCreated);
+  }, [customer.id, fetchOfferings]);
+
+  // Combine real database offerings with customer prop fallback
+  const offerings: Offering[] = useMemo(() => {
+    if (dbOfferings.length > 0) {
+      return dbOfferings.map((co) => ({
+        id: co.id,
+        name: co.offering_name || "Custom Offering",
+        description: `Provisioned service for ${customer.company}`,
+        status: (co.status as any) || "Active",
+        startDate: co.start_date ? new Date(co.start_date).toLocaleDateString() : "Active",
+        expiryDate: co.end_date ? new Date(co.end_date).toLocaleDateString() : "Ongoing",
+        quantity: "1 unit",
+        pricing: "Enterprise",
+        notes: "Provisioned via Analytics Studio",
+        owner: "SuperBlock Platform",
+      }));
+    }
+    return customer.offerings || [];
+  }, [dbOfferings, customer.offerings, customer.company]);
 
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-base font-semibold">Offerings</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-base font-semibold">Offerings & Products</h2>
+            {loading && <Loader2 className="size-3.5 animate-spin text-muted-foreground" />}
+          </div>
           <p className="mt-1 text-xs text-muted-foreground">
-            Products and services currently provisioned for this customer.
+            Products and operational services provisioned for {customer.company}.
           </p>
         </div>
         <QuickFormDialog
           title="Add offering"
-          description={`Provision a new offering for ${customer.company}.`}
+          description={`Provision a new service or product offering for ${customer.company}.`}
+          type="offering"
+          customerId={customer.id}
           trigger={
-            <Button size="sm">
+            <Button size="sm" className="gap-1.5">
               <Plus className="size-3.5" />
               Add offering
             </Button>

@@ -11,6 +11,7 @@ import { fetchAuthSession } from "aws-amplify/auth";
 import { createCustomerMeeting } from "@/lib/api/meetings";
 import { createCustomerNote } from "@/lib/api/notes";
 import { createCustomerInvoice } from "@/lib/api/billing";
+import { createCustomerOffering } from "@/lib/api/offerings";
 
 export interface QuickFormDefaultValues {
   name?: string;
@@ -31,7 +32,7 @@ export function QuickFormDialog({
   trigger: ReactNode;
   title: string;
   description: string;
-  type?: "general" | "note" | "meeting" | "customer" | "product" | "invoice";
+  type?: "general" | "note" | "meeting" | "customer" | "product" | "invoice" | "offering";
   defaultValues?: QuickFormDefaultValues;
   customerId?: string;
 }) {
@@ -222,6 +223,44 @@ export function QuickFormDialog({
       } catch (err: any) {
         console.error("Error creating invoice:", err);
         toast.error(err?.message || "Failed to create invoice");
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+
+    if (type === "offering") {
+      const targetCustomerId = customerId || defaultValues?.customerId;
+      if (!targetCustomerId) {
+        toast.error("Customer ID is required to add an offering");
+        return;
+      }
+      if (!formName.trim()) {
+        toast.error("Please enter an offering name");
+        return;
+      }
+      setSaving(true);
+      try {
+        const createdOffering = await createCustomerOffering({
+          customerId: targetCustomerId,
+          offeringName: formName.trim(),
+          status: "Active",
+        });
+        toast.success("Offering provisioned", {
+          description: "New offering has been recorded in the database.",
+        });
+        setOpen(false);
+        setFormName("");
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("customer-offering-created", {
+              detail: { customerId: targetCustomerId, offering: createdOffering },
+            })
+          );
+        }
+      } catch (err: any) {
+        console.error("Error creating offering:", err);
+        toast.error(err?.message || "Failed to create offering");
       } finally {
         setSaving(false);
       }

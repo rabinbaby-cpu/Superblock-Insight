@@ -25,6 +25,8 @@ import { createInvoiceHandler } from "./lambda/invoices/createInvoice";
 import { getSubscriptionsHandler } from "./lambda/subscriptions/getSubscriptions";
 import { getProductsHandler } from "./lambda/products/getProducts";
 import { getCredentialsHandler } from "./lambda/credentials/getCredentials";
+import { getCustomerOfferingsHandler } from "./lambda/customerOfferings/getCustomerOfferings";
+import { createCustomerOfferingHandler } from "./lambda/customerOfferings/createCustomerOffering";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -486,6 +488,49 @@ app.use(express.json());
     } catch (error: any) {
       console.error("Error fetching products:", error);
       return res.status(500).json({ success: false, error: error?.message || "Internal server error", products: [] });
+    }
+  });
+
+  // Customer Offerings endpoints
+  app.get("/api/customer-offerings", async (req, res) => {
+    try {
+      const result = await getCustomerOfferingsHandler({
+        httpMethod: "GET",
+        path: "/customer-offerings",
+        headers: req.headers as Record<string, string | undefined>,
+        queryStringParameters: req.query as Record<string, string | undefined>,
+      });
+      let responseData: unknown;
+      try {
+        responseData = JSON.parse(result.body);
+      } catch {
+        responseData = { message: result.body };
+      }
+      return res.status(result.statusCode).json(responseData);
+    } catch (error: any) {
+      console.error("Error fetching customer offerings:", error);
+      return res.status(500).json({ success: false, error: error?.message || "Internal server error", offerings: [] });
+    }
+  });
+
+  app.post("/api/customer-offerings", async (req, res) => {
+    try {
+      const result = await createCustomerOfferingHandler({
+        httpMethod: "POST",
+        path: "/customer-offerings",
+        headers: req.headers as Record<string, string | undefined>,
+        body: typeof req.body === "string" ? req.body : JSON.stringify(req.body),
+      });
+      let responseData: unknown;
+      try {
+        responseData = JSON.parse(result.body);
+      } catch {
+        responseData = { message: result.body };
+      }
+      return res.status(result.statusCode).json(responseData);
+    } catch (error: any) {
+      console.error("Error creating customer offering:", error);
+      return res.status(500).json({ success: false, error: error?.message || "Internal server error" });
     }
   });
 
