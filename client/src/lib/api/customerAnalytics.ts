@@ -295,7 +295,7 @@ export const realSuperblockCustomers: Customer[] = Object.entries(customerContac
 export const defaultAllCustomers: Customer[] = [...realSuperblockCustomers, ...fallbackCustomers];
 
 /**
- * Fetches customer analytics data from https://api.superblock.chat/customeranalytics
+ * Fetches customer analytics data from https://gateway.superblock.chat/customeranalytics
  * with request deduplication, in-memory caching, and graceful fallback.
  */
 export async function fetchCustomerAnalytics(forceRefresh = false): Promise<CustomerAnalyticsApiResponse> {
@@ -321,7 +321,7 @@ export async function fetchCustomerAnalytics(forceRefresh = false): Promise<Cust
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 4000);
 
-      const res = await fetch("https://api.superblock.chat/customeranalytics", {
+      const res = await fetch("https://gateway.superblock.chat/customeranalytics", {
         method: "GET",
         headers: {
           Authorization: `Bearer ${token}`,

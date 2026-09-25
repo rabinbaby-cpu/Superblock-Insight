@@ -40,7 +40,7 @@ interface OfferingsResponse {
 }
 
 const PRODUCTION_DASHBOARD_BASE =
-  "https://api.superblock.chat/customeranalyticsdashaboard";
+  "https://gateway.superblock.chat/customeranalyticsdashaboard";
 
 async function authHeaders(): Promise<Record<string, string>> {
   const headers: Record<string, string> = {

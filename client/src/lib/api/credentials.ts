@@ -65,7 +65,7 @@ interface CredentialsResponse {
 }
 
 const PRODUCTION_DASHBOARD_BASE =
-  "https://api.superblock.chat/customeranalyticsdashaboard";
+  "https://gateway.superblock.chat/customeranalyticsdashaboard";
 
 async function authHeaders(): Promise<Record<string, string>> {
   const headers: Record<string, string> = {
@@ -127,7 +127,7 @@ export function buildFallbackCredentials(
       businessAccountId: `waba_${accountId}`,
       businessPhoneNumberId: `10928374${accountId.slice(0, 7)}`,
       businessPortfolioId: `portfolio_${accountId}`,
-      whatsappEndpoint: "https://api.superblock.chat/sendWhatsappMessage",
+      whatsappEndpoint: "https://gateway.superblock.chat/sendWhatsappMessage",
       hasToken: true,
       graphApiToken: "EAAQ...9ZBYZD",
     },

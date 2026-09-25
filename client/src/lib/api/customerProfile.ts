@@ -72,7 +72,7 @@ function sanitizeProfile(raw: Record<string, any>): CustomerProfileData {
 }
 
 /**
- * Fetches per-customer profile and operational metadata from https://api.superblock.chat/profile?userId={userId}
+ * Fetches per-customer profile and operational metadata from https://gateway.superblock.chat/profile?userId={userId}
  */
 export async function fetchCustomerProfile(
   userId: string,
@@ -104,7 +104,7 @@ export async function fetchCustomerProfile(
       const timeoutId = setTimeout(() => controller.abort(), 4000);
 
       const res = await fetch(
-        `https://api.superblock.chat/profile?userId=${encodeURIComponent(userId)}`,
+        `https://gateway.superblock.chat/profile?userId=${encodeURIComponent(userId)}`,
         {
           method: "GET",
           headers: {

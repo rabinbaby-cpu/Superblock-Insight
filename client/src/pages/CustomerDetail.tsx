@@ -2491,7 +2491,7 @@ function Credentials({ customer }: { customer: Customer }) {
     data.meta.hasToken && data.meta.businessPhoneNumberId
   );
 
-  const curlTestSnippet = `curl -X POST "${data.meta.whatsappEndpoint || "https://api.superblock.chat/sendWhatsappMessage"}" \\
+  const curlTestSnippet = `curl -X POST "${data.meta.whatsappEndpoint || "https://gateway.superblock.chat/sendWhatsappMessage"}" \\
   -H "Content-Type: application/json" \\
   -d '{
     "client_user_id": "${data.username || "client_id"}",
@@ -2594,13 +2594,13 @@ function Credentials({ customer }: { customer: Customer }) {
             />
             <CredentialRow
               label="Endpoint"
-              value={data.meta.whatsappEndpoint || "https://api.superblock.chat/sendWhatsappMessage"}
+              value={data.meta.whatsappEndpoint || "https://gateway.superblock.chat/sendWhatsappMessage"}
               mono
               action={
                 <CopyButton
                   value={
                     data.meta.whatsappEndpoint ||
-                    "https://api.superblock.chat/sendWhatsappMessage"
+                    "https://gateway.superblock.chat/sendWhatsappMessage"
                   }
                 />
               }

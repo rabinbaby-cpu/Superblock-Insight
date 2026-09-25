@@ -29,11 +29,11 @@ interface MutateNoteResponse {
 
 // Working customer API base (same as customerAnalytics.ts)
 const PRODUCTION_CUSTOMER_BASE =
-  "https://api.superblock.chat/customeranalytics";
+  "https://gateway.superblock.chat/customeranalytics";
 
 // Dashboard base
 const PRODUCTION_DASHBOARD_BASE =
-  "https://api.superblock.chat/customeranalyticsdashaboard";
+  "https://gateway.superblock.chat/customeranalyticsdashaboard";
 
 function isLocalhost(): boolean {
   if (typeof window === "undefined") return false;

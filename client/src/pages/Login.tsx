@@ -247,7 +247,7 @@ export default function Login() {
         headers["Authorization"] = `Bearer ${token}`;
       }
 
-      const apiUrl = `https://api.superblock.chat/login?userId=${userId}`;
+      const apiUrl = `https://gateway.superblock.chat/login?userId=${userId}`;
       console.log("🌐 Fetching user metadata from:", apiUrl);
 
       let userNamedata: Record<string, any> = {};

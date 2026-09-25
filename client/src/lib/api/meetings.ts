@@ -29,10 +29,10 @@ interface CreateMeetingResponse {
 }
 
 const PRODUCTION_CUSTOMER_BASE =
-  "https://api.superblock.chat/customeranalytics";
+  "https://gateway.superblock.chat/customeranalytics";
 
 const PRODUCTION_DASHBOARD_BASE =
-  "https://api.superblock.chat/customeranalyticsdashaboard";
+  "https://gateway.superblock.chat/customeranalyticsdashaboard";
 
 async function authHeaders(): Promise<Record<string, string>> {
   const headers: Record<string, string> = {
