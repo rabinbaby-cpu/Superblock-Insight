@@ -1136,22 +1136,48 @@ export function Invoices() {
         const data = await res.json();
         if (data?.success && Array.isArray(data?.invoices)) {
           setInvoicesList(data.invoices);
+          try {
+            localStorage.setItem("sb_invoices_all", JSON.stringify(data.invoices));
+          } catch {}
+          return;
         }
       }
     } catch (err) {
-      console.warn("Could not load invoices:", err);
+      console.warn("Could not load invoices from server:", err);
     }
+
+    try {
+      const cached = localStorage.getItem("sb_invoices_all");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setInvoicesList(parsed);
+        }
+      }
+    } catch {}
   };
 
   useEffect(() => {
     loadInvoices();
+
+    const handleInvoiceEvent = () => {
+      loadInvoices();
+    };
+
+    window.addEventListener("customer-invoice-created", handleInvoiceEvent);
+    window.addEventListener("customer-operations-updated", handleInvoiceEvent);
+
+    return () => {
+      window.removeEventListener("customer-invoice-created", handleInvoiceEvent);
+      window.removeEventListener("customer-operations-updated", handleInvoiceEvent);
+    };
   }, []);
 
   const filtered = useMemo(() => {
     return invoicesList.filter(
       (x) =>
         (status === "All statuses" || x.status === status) &&
-        `${x.id || ""} ${x.customer || ""}`.toLowerCase().includes(query.toLowerCase())
+        `${x.id || ""} ${x.customer || ""} ${x.product || ""}`.toLowerCase().includes(query.toLowerCase())
     );
   }, [invoicesList, status, query]);
 
@@ -1175,13 +1201,20 @@ export function Invoices() {
     }
     const totalAmount = Number(form.amount) || 0;
     const tax = Math.round(totalAmount * 0.18);
+    const invId = `INV-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
     const newInv = {
-      id: `INV-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
+      id: invId,
+      invoice_number: invId,
       customerId: form.customerId,
+      customer_id: form.customerId,
       customer: form.customer,
+      customer_name: form.customer,
       product: form.product,
+      description: form.product,
       date: new Date().toLocaleDateString("en-US", { day: "2-digit", month: "short", year: "numeric" }),
+      issue_date: new Date().toISOString().split("T")[0],
       dueDate: form.dueDate,
+      due_date: form.dueDate,
       amount: totalAmount,
       tax: tax,
       total: totalAmount + tax,
@@ -1189,29 +1222,43 @@ export function Invoices() {
     };
 
     try {
-      await fetch("/api/invoices", {
+      const res = await fetch("/api/invoices", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newInv),
       });
-      toast.success("Invoice created", { description: `${newInv.id} issued for ${newInv.customer}.` });
-      setCreateDialogOpen(false);
-      await loadInvoices();
-    } catch (err) {
-      toast.error("Failed to create invoice");
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.success) {
+        const created = data.invoice || newInv;
+        toast.success("Invoice created", { description: `${created.id || newInv.id} issued for ${created.customer || newInv.customer}.` });
+        setCreateDialogOpen(false);
+        setInvoicesList((prev) => [created, ...prev.filter((i) => i.id !== created.id)]);
+        window.dispatchEvent(
+          new CustomEvent("customer-invoice-created", {
+            detail: { customerId: form.customerId, invoice: created },
+          })
+        );
+        await loadInvoices();
+      } else {
+        throw new Error(data?.error || "Failed to create invoice");
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to create invoice");
     }
   };
 
   const handleMarkAsPaid = async (inv: any) => {
     try {
-      await fetch(`/api/invoices/${inv.id}`, {
+      const res = await fetch(`/api/invoices/${inv.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "Paid", paymentDate: new Date().toISOString().split("T")[0] }),
+        body: JSON.stringify({ status: "Paid", paymentDate: new Date().toLocaleDateString("en-US", { day: "2-digit", month: "short", year: "numeric" }) }),
       });
-      toast.success("Invoice marked as paid", { description: `${inv.id} marked as Paid.` });
-      setSelected(null);
-      await loadInvoices();
+      if (res.ok) {
+        toast.success("Invoice marked as paid", { description: `${inv.id} marked as Paid.` });
+        setSelected(null);
+        await loadInvoices();
+      }
     } catch (err) {
       toast.error("Failed to update invoice");
     }

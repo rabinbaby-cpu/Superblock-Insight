@@ -159,52 +159,63 @@ export async function getCustomerInvoices(
     } catch (err) {
       console.warn("Local invoices fetch failed (database offline), using fallback:", err);
     }
-    const local = getLocalInvoices(customerId);
-    const serverIds = new Set(serverInvoices.map((i) => i.id));
-    return [...local.filter((l) => !serverIds.has(l.id)), ...serverInvoices];
-  }
+  } else {
+    // Production Strategy 1: Path-based on customeranalyticsdashaboard/invoices
+    try {
+      const dashboardUrl = `${PRODUCTION_DASHBOARD_BASE}/invoices?customerId=${encoded}`;
+      const response = await fetch(dashboardUrl, {
+        method: "GET",
+        headers,
+      });
+      if (response.ok) {
+        const data = (await response.json().catch(() => null)) as InvoicesResponse | null;
+        if (data?.success && Array.isArray(data.invoices)) {
+          serverInvoices = data.invoices;
+        }
+      }
+    } catch (err) {
+      console.warn("Direct fetch from customeranalyticsdashaboard/invoices failed, attempting action param fallback:", err);
+    }
 
-  // Production Strategy 1: Path-based on customeranalyticsdashaboard/invoices
-  try {
-    const dashboardUrl = `${PRODUCTION_DASHBOARD_BASE}/invoices?customerId=${encoded}`;
-    const response = await fetch(dashboardUrl, {
-      method: "GET",
-      headers,
-    });
-    if (response.ok) {
-      const data = (await response.json().catch(() => null)) as InvoicesResponse | null;
-      if (data?.success && Array.isArray(data.invoices)) {
-        return data.invoices;
+    if (serverInvoices.length === 0) {
+      // Production Strategy 2: Action parameter on customeranalyticsdashaboard?action=invoices
+      try {
+        const actionUrl = `${PRODUCTION_DASHBOARD_BASE}?action=invoices&customerId=${encoded}`;
+        const response = await fetch(actionUrl, { method: "GET", headers });
+        if (response.ok) {
+          const data = (await response.json().catch(() => null)) as InvoicesResponse | null;
+          if (data?.success && Array.isArray(data.invoices)) {
+            serverInvoices = data.invoices;
+          }
+        }
+      } catch (err) {
+        console.warn("Fetch from customeranalyticsdashaboard?action=invoices failed, attempting customeranalytics fallback:", err);
       }
     }
-  } catch (err) {
-    console.warn("Direct fetch from customeranalyticsdashaboard/invoices failed, attempting action param fallback:", err);
-  }
 
-  // Production Strategy 2: Action parameter on customeranalyticsdashaboard?action=invoices
-  try {
-    const actionUrl = `${PRODUCTION_DASHBOARD_BASE}?action=invoices&customerId=${encoded}`;
-    const response = await fetch(actionUrl, { method: "GET", headers });
-    if (response.ok) {
-      const data = (await response.json().catch(() => null)) as InvoicesResponse | null;
-      if (data?.success && Array.isArray(data.invoices)) {
-        return data.invoices;
+    if (serverInvoices.length === 0) {
+      // Production Strategy 3: Fallback to customeranalytics?action=invoices
+      try {
+        const customerApiUrl = `${PRODUCTION_CUSTOMER_BASE}?action=invoices&customerId=${encoded}`;
+        const response = await fetch(customerApiUrl, { method: "GET", headers });
+        const data = (await response.json().catch(() => null)) as InvoicesResponse | null;
+        if (response.ok && data?.success && Array.isArray(data.invoices)) {
+          serverInvoices = data.invoices;
+        }
+      } catch (err) {
+        console.warn("Fetch from customeranalytics?action=invoices failed:", err);
       }
     }
-  } catch (err) {
-    console.warn("Fetch from customeranalyticsdashaboard?action=invoices failed, attempting customeranalytics fallback:", err);
   }
 
-  // Production Strategy 3: Fallback to customeranalytics?action=invoices
-  const customerApiUrl = `${PRODUCTION_CUSTOMER_BASE}?action=invoices&customerId=${encoded}`;
-  const response = await fetch(customerApiUrl, { method: "GET", headers });
-  const data = (await response.json().catch(() => null)) as InvoicesResponse | null;
-
-  if (!response.ok || !data?.success) {
-    throw new Error(data?.error || `Failed to fetch invoices (status ${response.status})`);
-  }
-
-  return Array.isArray(data.invoices) ? data.invoices : [];
+  const local = getLocalInvoices(customerId);
+  const serverIds = new Set(
+    serverInvoices.flatMap((i) => [i.id, (i as any).invoice_number, (i as any).invoiceNumber].filter(Boolean))
+  );
+  return [
+    ...local.filter((l) => !serverIds.has(l.id) && !serverIds.has((l as any).invoice_number)),
+    ...serverInvoices,
+  ];
 }
 
 /**
@@ -354,6 +365,21 @@ export async function createCustomerInvoice(input: {
     ...input,
   };
 
+  const fallbackRecord: InvoiceRecord = {
+    id: input.invoiceNumber || `local-inv-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    customer_id: input.customerId,
+    invoice_number: input.invoiceNumber || `INV-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
+    status: input.status || "Paid",
+    amount: input.amount || 0,
+    currency: input.currency || "INR",
+    issue_date: input.issueDate || new Date().toISOString(),
+    due_date: input.dueDate || new Date(Date.now() + 14 * 86400000).toISOString(),
+    paid_date: input.status === "Paid" ? new Date().toISOString() : null,
+    description: input.description || null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+
   if (isLocalhost()) {
     try {
       const response = await fetch("/api/invoices", {
@@ -367,23 +393,9 @@ export async function createCustomerInvoice(input: {
         return data.invoice;
       }
     } catch (err) {
-      console.warn("Local create invoice failed (database offline), persisting locally:", err);
+      console.warn("Local create invoice failed, persisting locally:", err);
     }
 
-    const fallbackRecord: InvoiceRecord = {
-      id: `local-inv-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      customer_id: input.customerId,
-      invoice_number: input.invoiceNumber || `INV-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
-      status: input.status || "draft",
-      amount: input.amount || 0,
-      currency: input.currency || "USD",
-      issue_date: input.issueDate || new Date().toISOString(),
-      due_date: input.dueDate || new Date(Date.now() + 30 * 86400000).toISOString(),
-      paid_date: null,
-      description: input.description || null,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
     saveLocalInvoice(input.customerId, fallbackRecord);
     return fallbackRecord;
   }
@@ -397,6 +409,7 @@ export async function createCustomerInvoice(input: {
     });
     const data = await response.json().catch(() => null);
     if (response.ok && data?.success && data.invoice) {
+      saveLocalInvoice(input.customerId, data.invoice);
       return data.invoice;
     }
   } catch (err) {
@@ -404,15 +417,22 @@ export async function createCustomerInvoice(input: {
   }
 
   // Production Strategy 2: Action param
-  const response = await fetch(`${PRODUCTION_DASHBOARD_BASE}?action=create_invoice`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(payload),
-  });
-  const data = await response.json().catch(() => null);
-  if (!response.ok || !data?.success || !data.invoice) {
-    throw new Error(data?.error || `Failed to create invoice (status ${response.status})`);
+  try {
+    const response = await fetch(`${PRODUCTION_DASHBOARD_BASE}?action=create_invoice`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload),
+    });
+    const data = await response.json().catch(() => null);
+    if (response.ok && data?.success && data.invoice) {
+      saveLocalInvoice(input.customerId, data.invoice);
+      return data.invoice;
+    }
+  } catch (err) {
+    console.warn("POST with action=create_invoice failed:", err);
   }
-  return data.invoice;
+
+  saveLocalInvoice(input.customerId, fallbackRecord);
+  return fallbackRecord;
 }
 

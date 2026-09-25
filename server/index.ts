@@ -1,4 +1,5 @@
 import express from "express";
+import fs from "fs";
 import { createServer } from "http";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -457,116 +458,481 @@ app.use(express.json());
   app.put("/api/meetings/:id", handleUpdateMeeting);
   app.patch("/api/meetings/:id", handleUpdateMeeting);
 
-  let fallbackInvoices = [
-    { id: "INV-20341", date: "01 Sep 2026", dueDate: "10 Sep 2026", product: "Growth + WhatsApp API", amount: 128000, tax: 23040, total: 151040, status: "Paid", paymentDate: "06 Sep 2026", customer: "Acme Commerce", customerId: "CUS-10482" },
-    { id: "INV-20116", date: "01 Aug 2026", dueDate: "10 Aug 2026", product: "Growth + WhatsApp API", amount: 128000, tax: 23040, total: 151040, status: "Paid", paymentDate: "08 Aug 2026", customer: "Acme Commerce", customerId: "CUS-10482" },
-    { id: "INV-19982", date: "01 Jul 2026", dueDate: "10 Jul 2026", product: "Growth + WhatsApp API", amount: 124000, tax: 22320, total: 146320, status: "Paid", paymentDate: "09 Jul 2026", customer: "Acme Commerce", customerId: "CUS-10482" },
-    { id: "INV-20455", date: "15 Sep 2026", dueDate: "25 Sep 2026", product: "Advanced + AI Agent", amount: 186000, tax: 33480, total: 219480, status: "Sent", customer: "Northstar Learning", customerId: "CUS-10461" },
-    { id: "INV-20412", date: "10 Sep 2026", dueDate: "20 Sep 2026", product: "Growth", amount: 92000, tax: 16560, total: 108560, status: "Paid", paymentDate: "12 Sep 2026", customer: "Carely Health", customerId: "CUS-10444" },
-    { id: "INV-20389", date: "05 Sep 2026", dueDate: "15 Sep 2026", product: "Advanced", amount: 214000, tax: 38520, total: 252520, status: "Overdue", customer: "Fleetgrid Logistics", customerId: "CUS-10398" },
-    { id: "INV-20299", date: "20 Aug 2026", dueDate: "30 Aug 2026", product: "Enterprise", amount: 248000, tax: 44640, total: 292640, status: "Draft", customer: "Mirovia Finance", customerId: "CUS-10376" },
-  ];
+  const INVOICES_STORAGE_FILE = path.join(__dirname, "invoices-data.json");
 
-  // Invoices endpoint
+  function getInitialInvoices() {
+    return [
+      {
+        id: "INV-20341",
+        invoice_number: "INV-20341",
+        invoiceNumber: "INV-20341",
+        date: "01 Sep 2026",
+        issue_date: "2026-09-01",
+        dueDate: "10 Sep 2026",
+        due_date: "2026-09-10",
+        product: "Growth + WhatsApp API",
+        description: "Growth + WhatsApp API",
+        amount: 128000,
+        tax: 23040,
+        total: 151040,
+        status: "Paid",
+        paymentDate: "06 Sep 2026",
+        paid_date: "2026-09-06",
+        customer: "Acme Commerce",
+        customer_name: "Acme Commerce",
+        customerId: "CUS-10482",
+        customer_id: "CUS-10482",
+        currency: "INR",
+        created_at: "2026-09-01T00:00:00.000Z",
+        updated_at: "2026-09-01T00:00:00.000Z",
+      },
+      {
+        id: "INV-20116",
+        invoice_number: "INV-20116",
+        invoiceNumber: "INV-20116",
+        date: "01 Aug 2026",
+        issue_date: "2026-08-01",
+        dueDate: "10 Aug 2026",
+        due_date: "2026-08-10",
+        product: "Growth + WhatsApp API",
+        description: "Growth + WhatsApp API",
+        amount: 128000,
+        tax: 23040,
+        total: 151040,
+        status: "Paid",
+        paymentDate: "08 Aug 2026",
+        paid_date: "2026-08-08",
+        customer: "Acme Commerce",
+        customer_name: "Acme Commerce",
+        customerId: "CUS-10482",
+        customer_id: "CUS-10482",
+        currency: "INR",
+        created_at: "2026-08-01T00:00:00.000Z",
+        updated_at: "2026-08-01T00:00:00.000Z",
+      },
+      {
+        id: "INV-19982",
+        invoice_number: "INV-19982",
+        invoiceNumber: "INV-19982",
+        date: "01 Jul 2026",
+        issue_date: "2026-07-01",
+        dueDate: "10 Jul 2026",
+        due_date: "2026-07-10",
+        product: "Growth + WhatsApp API",
+        description: "Growth + WhatsApp API",
+        amount: 124000,
+        tax: 22320,
+        total: 146320,
+        status: "Paid",
+        paymentDate: "09 Jul 2026",
+        paid_date: "2026-07-09",
+        customer: "Acme Commerce",
+        customer_name: "Acme Commerce",
+        customerId: "CUS-10482",
+        customer_id: "CUS-10482",
+        currency: "INR",
+        created_at: "2026-07-01T00:00:00.000Z",
+        updated_at: "2026-07-01T00:00:00.000Z",
+      },
+      {
+        id: "INV-20455",
+        invoice_number: "INV-20455",
+        invoiceNumber: "INV-20455",
+        date: "15 Sep 2026",
+        issue_date: "2026-09-15",
+        dueDate: "25 Sep 2026",
+        due_date: "2026-09-25",
+        product: "Advanced + AI Agent",
+        description: "Advanced + AI Agent",
+        amount: 186000,
+        tax: 33480,
+        total: 219480,
+        status: "Sent",
+        customer: "Northstar Learning",
+        customer_name: "Northstar Learning",
+        customerId: "CUS-10461",
+        customer_id: "CUS-10461",
+        currency: "INR",
+        created_at: "2026-09-15T00:00:00.000Z",
+        updated_at: "2026-09-15T00:00:00.000Z",
+      },
+      {
+        id: "INV-20412",
+        invoice_number: "INV-20412",
+        invoiceNumber: "INV-20412",
+        date: "10 Sep 2026",
+        issue_date: "2026-09-10",
+        dueDate: "20 Sep 2026",
+        due_date: "2026-09-20",
+        product: "Growth",
+        description: "Growth",
+        amount: 92000,
+        tax: 16560,
+        total: 108560,
+        status: "Paid",
+        paymentDate: "12 Sep 2026",
+        paid_date: "2026-09-12",
+        customer: "Carely Health",
+        customer_name: "Carely Health",
+        customerId: "CUS-10444",
+        customer_id: "CUS-10444",
+        currency: "INR",
+        created_at: "2026-09-10T00:00:00.000Z",
+        updated_at: "2026-09-10T00:00:00.000Z",
+      },
+      {
+        id: "INV-20389",
+        invoice_number: "INV-20389",
+        invoiceNumber: "INV-20389",
+        date: "05 Sep 2026",
+        issue_date: "2026-09-05",
+        dueDate: "15 Sep 2026",
+        due_date: "2026-09-15",
+        product: "Advanced",
+        description: "Advanced",
+        amount: 214000,
+        tax: 38520,
+        total: 252520,
+        status: "Overdue",
+        customer: "Fleetgrid Logistics",
+        customer_name: "Fleetgrid Logistics",
+        customerId: "CUS-10398",
+        customer_id: "CUS-10398",
+        currency: "INR",
+        created_at: "2026-09-05T00:00:00.000Z",
+        updated_at: "2026-09-05T00:00:00.000Z",
+      },
+      {
+        id: "INV-20299",
+        invoice_number: "INV-20299",
+        invoiceNumber: "INV-20299",
+        date: "20 Aug 2026",
+        issue_date: "2026-08-20",
+        dueDate: "30 Aug 2026",
+        due_date: "2026-08-30",
+        product: "Enterprise",
+        description: "Enterprise",
+        amount: 248000,
+        tax: 44640,
+        total: 292640,
+        status: "Draft",
+        customer: "Mirovia Finance",
+        customer_name: "Mirovia Finance",
+        customerId: "CUS-10376",
+        customer_id: "CUS-10376",
+        currency: "INR",
+        created_at: "2026-08-20T00:00:00.000Z",
+        updated_at: "2026-08-20T00:00:00.000Z",
+      },
+    ];
+  }
+
+  function loadFallbackInvoices(): any[] {
+    try {
+      if (fs.existsSync(INVOICES_STORAGE_FILE)) {
+        const raw = fs.readFileSync(INVOICES_STORAGE_FILE, "utf-8");
+        const data = JSON.parse(raw);
+        if (Array.isArray(data) && data.length > 0) {
+          return data;
+        }
+      }
+    } catch (err) {
+      console.warn("Could not read invoices-data.json:", err);
+    }
+    const initial = getInitialInvoices();
+    try {
+      fs.writeFileSync(INVOICES_STORAGE_FILE, JSON.stringify(initial, null, 2), "utf-8");
+    } catch {}
+    return initial;
+  }
+
+  function saveFallbackInvoicesToDisk(invoices: any[]) {
+    try {
+      fs.writeFileSync(INVOICES_STORAGE_FILE, JSON.stringify(invoices, null, 2), "utf-8");
+    } catch (err) {
+      console.warn("Could not write invoices-data.json:", err);
+    }
+  }
+
+  function normalizeInvoiceRecord(inv: any): any {
+    if (!inv) return inv;
+    const amt = Number(inv.amount) || 0;
+    const tax = inv.tax !== undefined ? Number(inv.tax) : Math.round(amt * 0.18);
+    const total = inv.total !== undefined ? Number(inv.total) : amt + tax;
+    const num = inv.invoice_number || inv.invoiceNumber || inv.id || "";
+    const custId = inv.customer_id || inv.customerId || "";
+    const custName = inv.customer_name || inv.customer || inv.customerName || "Superblock Customer";
+    const desc = inv.description || inv.product || "Growth + WhatsApp API";
+
+    let dateStr = inv.date || "";
+    const rawIssue = inv.issue_date || inv.issueDate || inv.date || inv.created_at;
+    if (!dateStr && rawIssue) {
+      try {
+        dateStr = new Date(rawIssue).toLocaleDateString("en-US", { day: "2-digit", month: "short", year: "numeric" });
+      } catch {
+        dateStr = String(rawIssue);
+      }
+    }
+
+    let dueStr = inv.dueDate || "";
+    const rawDue = inv.due_date || inv.dueDate;
+    if (!dueStr && rawDue) {
+      try {
+        dueStr = new Date(rawDue).toLocaleDateString("en-US", { day: "2-digit", month: "short", year: "numeric" });
+      } catch {
+        dueStr = String(rawDue);
+      }
+    }
+
+    const status = inv.status || "Paid";
+    const paidDate = inv.paymentDate || inv.paid_date || (status === "Paid" ? dateStr : undefined);
+
+    return {
+      id: num || inv.id,
+      invoice_number: num,
+      invoiceNumber: num,
+      customer: custName,
+      customer_name: custName,
+      customerId: custId,
+      customer_id: custId,
+      product: desc,
+      description: desc,
+      date: dateStr || "—",
+      issue_date: rawIssue || new Date().toISOString(),
+      dueDate: dueStr || "—",
+      due_date: rawDue || new Date(Date.now() + 14 * 86400000).toISOString(),
+      amount: amt,
+      tax,
+      total,
+      status,
+      currency: inv.currency || "INR",
+      paymentDate: paidDate,
+      paid_date: paidDate,
+      created_at: inv.created_at || new Date().toISOString(),
+      updated_at: inv.updated_at || new Date().toISOString(),
+    };
+  }
+
+  // Invoices endpoints
   app.get("/api/invoices", async (req, res) => {
     try {
-      const result = await getInvoicesHandler({
-        httpMethod: "GET",
-        path: "/invoices",
-        headers: req.headers as Record<string, string | undefined>,
-        queryStringParameters: req.query as Record<string, string | undefined>,
-      });
-      let responseData: any;
+      const customerId = (
+        (req.query.customerId as string) ||
+        (req.query.customer_id as string) ||
+        ""
+      ).trim();
+
+      let dbInvoices: any[] = [];
       try {
-        responseData = JSON.parse(result.body);
+        const result = await getInvoicesHandler({
+          httpMethod: "GET",
+          path: "/invoices",
+          headers: req.headers as Record<string, string | undefined>,
+          queryStringParameters: req.query as Record<string, string | undefined>,
+        });
+        if (result.statusCode >= 200 && result.statusCode < 300) {
+          const parsed = JSON.parse(result.body || "{}");
+          if (Array.isArray(parsed?.invoices) && parsed.invoices.length > 0) {
+            dbInvoices = parsed.invoices;
+          }
+        }
       } catch {
-        responseData = { message: result.body };
+        // Fall back gracefully to disk store when DB is offline
       }
-      if (result.statusCode >= 200 && result.statusCode < 300 && Array.isArray(responseData?.invoices) && responseData.invoices.length > 0) {
-        return res.status(result.statusCode).json(responseData);
+
+      const normalizedDb = dbInvoices.map(normalizeInvoiceRecord);
+      const diskInvoices = loadFallbackInvoices().map(normalizeInvoiceRecord);
+
+      // Merge: DB items prioritized, combined with persistent store
+      const seen = new Set<string>();
+      const combined: any[] = [];
+
+      for (const inv of normalizedDb) {
+        const key = inv.invoice_number || inv.id;
+        if (key && !seen.has(key)) {
+          seen.add(key);
+          combined.push(inv);
+        }
       }
-      return res.status(200).json({ success: true, count: fallbackInvoices.length, invoices: fallbackInvoices, offline: true });
+
+      for (const inv of diskInvoices) {
+        const key = inv.invoice_number || inv.id;
+        if (key && !seen.has(key)) {
+          seen.add(key);
+          combined.push(inv);
+        }
+      }
+
+      // Filter by customerId if requested
+      const filtered = customerId
+        ? combined.filter((inv) => {
+            const cId = String(inv.customerId || inv.customer_id || "").toLowerCase();
+            const targetId = customerId.toLowerCase();
+            const cName = String(inv.customer || inv.customer_name || "").toLowerCase();
+            return (
+              cId === targetId ||
+              cName === targetId ||
+              cId.includes(targetId) ||
+              targetId.includes(cId)
+            );
+          })
+        : combined;
+
+      return res.status(200).json({
+        success: true,
+        count: filtered.length,
+        customerId: customerId || undefined,
+        invoices: filtered,
+        offline: normalizedDb.length === 0,
+      });
     } catch (error: any) {
-      console.warn("Error fetching invoices (DB offline), serving fallback:", error?.message);
-      return res.status(200).json({ success: true, count: fallbackInvoices.length, invoices: fallbackInvoices, offline: true });
+      console.warn("Error in GET /api/invoices:", error?.message);
+      const fallback = loadFallbackInvoices().map(normalizeInvoiceRecord);
+      return res.status(200).json({
+        success: true,
+        count: fallback.length,
+        invoices: fallback,
+        offline: true,
+      });
     }
   });
 
   app.put("/api/invoices/:id", (req, res) => {
-    const id = req.params.id;
-    const updates = req.body || {};
-    const existing = fallbackInvoices.find((i) => i.id === id);
-    if (existing) {
-      Object.assign(existing, updates);
+    try {
+      const id = req.params.id;
+      const updates = req.body || {};
+      const current = loadFallbackInvoices();
+      let updatedObj: any = null;
+
+      const updatedList = current.map((inv) => {
+        if (inv.id === id || inv.invoice_number === id) {
+          updatedObj = normalizeInvoiceRecord({ ...inv, ...updates });
+          return updatedObj;
+        }
+        return inv;
+      });
+
+      if (!updatedObj) {
+        updatedObj = normalizeInvoiceRecord({ id, ...updates });
+        updatedList.unshift(updatedObj);
+      }
+
+      saveFallbackInvoicesToDisk(updatedList);
+      invalidateAnalyticsCache();
+      return res.json({ success: true, invoice: updatedObj });
+    } catch (error: any) {
+      return res.status(500).json({ success: false, error: error?.message || "Failed to update invoice" });
     }
-    return res.json({ success: true, invoice: existing || updates });
   });
 
   app.delete("/api/invoices/:id", (req, res) => {
-    const id = req.params.id;
-    fallbackInvoices = fallbackInvoices.filter((i) => i.id !== id);
-    return res.json({ success: true, id });
+    try {
+      const id = req.params.id;
+      const current = loadFallbackInvoices();
+      const filtered = current.filter((i) => i.id !== id && i.invoice_number !== id);
+      saveFallbackInvoicesToDisk(filtered);
+      invalidateAnalyticsCache();
+      return res.json({ success: true, id });
+    } catch (error: any) {
+      return res.status(500).json({ success: false, error: error?.message || "Failed to delete invoice" });
+    }
   });
 
   app.post("/api/invoices", async (req, res) => {
     try {
-      const result = await createInvoiceHandler({
-        httpMethod: "POST",
-        path: "/invoices",
-        headers: req.headers as Record<string, string | undefined>,
-        body: typeof req.body === "string" ? req.body : JSON.stringify(req.body),
+      const body = typeof req.body === "string" ? JSON.parse(req.body) : (req.body || {});
+
+      const totalAmount = Number(body.amount) || 0;
+      const tax = body.tax !== undefined ? Number(body.tax) : Math.round(totalAmount * 0.18);
+      const total = body.total !== undefined ? Number(body.total) : totalAmount + tax;
+      const invNumber = (
+        body.invoiceNumber ||
+        body.invoice_number ||
+        body.id ||
+        `INV-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`
+      ).trim();
+      const customerId = (body.customerId || body.customer_id || "CUS-DEFAULT").trim();
+      const customerName = (body.customer || body.customerName || body.customer_name || "Superblock Customer").trim();
+      const description = (body.product || body.description || "Platform & Software Services").trim();
+      const status = (body.status || "Sent").trim();
+      const issueDate = body.issueDate || body.issue_date || body.date || new Date().toISOString().split("T")[0];
+      const dueDate = body.dueDate || body.due_date || new Date(Date.now() + 14 * 86400000).toISOString().split("T")[0];
+      const currency = (body.currency || "INR").trim();
+
+      const newInv = normalizeInvoiceRecord({
+        id: invNumber,
+        invoice_number: invNumber,
+        invoiceNumber: invNumber,
+        customerId,
+        customer_id: customerId,
+        customer: customerName,
+        customer_name: customerName,
+        product: description,
+        description,
+        date: typeof issueDate === "string" && issueDate.includes("-") && issueDate.length <= 10
+          ? new Date(issueDate).toLocaleDateString("en-US", { day: "2-digit", month: "short", year: "numeric" })
+          : issueDate,
+        issue_date: issueDate,
+        dueDate: typeof dueDate === "string" && dueDate.includes("-") && dueDate.length <= 10
+          ? new Date(dueDate).toLocaleDateString("en-US", { day: "2-digit", month: "short", year: "numeric" })
+          : dueDate,
+        due_date: dueDate,
+        amount: totalAmount,
+        tax,
+        total,
+        status,
+        currency,
+        paymentDate: status === "Paid" ? new Date().toLocaleDateString("en-US", { day: "2-digit", month: "short", year: "numeric" }) : undefined,
+        paid_date: status === "Paid" ? new Date().toISOString() : null,
       });
-      let responseData: any;
+
+      // Attempt DB insert if reachable
+      let dbInserted: any = null;
       try {
-        responseData = JSON.parse(result.body);
-      } catch {
-        responseData = { message: result.body };
-      }
-      if (
-        result.statusCode >= 500 ||
-        (responseData && !responseData.success && (responseData.error?.includes("ECONNRESET") || responseData.error?.includes("connect")))
-      ) {
-        const bodyObj = typeof req.body === "string" ? JSON.parse(req.body) : (req.body || {});
-        return res.status(200).json({
-          success: true,
-          offline: true,
-          invoice: {
-            id: `inv-${Date.now()}`,
-            customer_id: bodyObj.customerId || bodyObj.customer_id,
-            invoice_number: bodyObj.invoiceNumber || `INV-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
-            status: bodyObj.status || "draft",
-            amount: bodyObj.amount || 0,
-            currency: bodyObj.currency || "USD",
-            issue_date: bodyObj.issueDate || new Date().toISOString(),
-            due_date: bodyObj.dueDate || new Date(Date.now() + 30 * 86400000).toISOString(),
-            paid_date: null,
-            description: bodyObj.description || null,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          },
+        const result = await createInvoiceHandler({
+          httpMethod: "POST",
+          path: "/invoices",
+          headers: req.headers as Record<string, string | undefined>,
+          body: JSON.stringify({
+            customerId,
+            invoiceNumber: invNumber,
+            amount: totalAmount,
+            currency,
+            status,
+            issueDate,
+            dueDate,
+            description,
+          }),
         });
+        if (result.statusCode >= 200 && result.statusCode < 300) {
+          const parsed = JSON.parse(result.body || "{}");
+          if (parsed?.success && parsed?.invoice) {
+            dbInserted = parsed.invoice;
+          }
+        }
+      } catch {
+        // Fall back gracefully to disk store when DB is offline
       }
-      return res.status(result.statusCode).json(responseData);
-    } catch (error: any) {
-      console.error("Error creating invoice:", error);
-      const bodyObj = typeof req.body === "string" ? JSON.parse(req.body) : (req.body || {});
+
+      const finalInv = dbInserted ? normalizeInvoiceRecord({ ...newInv, ...dbInserted }) : newInv;
+
+      // Save to persistent disk store
+      const current = loadFallbackInvoices();
+      const updatedList = [finalInv, ...current.filter((i) => i.id !== finalInv.id && i.invoice_number !== finalInv.id)];
+      saveFallbackInvoicesToDisk(updatedList);
+      invalidateAnalyticsCache();
+
       return res.status(200).json({
         success: true,
-        offline: true,
-        invoice: {
-          id: `inv-${Date.now()}`,
-          customer_id: bodyObj.customerId || bodyObj.customer_id,
-          invoice_number: bodyObj.invoiceNumber || `INV-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
-          status: bodyObj.status || "draft",
-          amount: bodyObj.amount || 0,
-          currency: bodyObj.currency || "USD",
-          issue_date: bodyObj.issueDate || new Date().toISOString(),
-          due_date: bodyObj.dueDate || new Date(Date.now() + 30 * 86400000).toISOString(),
-          paid_date: null,
-          description: bodyObj.description || null,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        },
+        invoice: finalInv,
+        invoices: updatedList,
+        offline: !dbInserted,
+      });
+    } catch (error: any) {
+      console.error("Error creating invoice:", error);
+      return res.status(500).json({
+        success: false,
+        error: error?.message || "Failed to create invoice",
       });
     }
   });

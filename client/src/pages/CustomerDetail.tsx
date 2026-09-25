@@ -2862,47 +2862,70 @@ function Billing({
     : (customer.subscription.mrr > 0 ? customer.subscription.mrr : 0);
 
   const invoices: Invoice[] = useMemo(() => {
-    if (dbInvoices.length > 0) {
-      return dbInvoices.map((inv) => {
+    const list: Invoice[] = [];
+    const seenIds = new Set<string>();
+
+    if (Array.isArray(dbInvoices) && dbInvoices.length > 0) {
+      for (const inv of dbInvoices) {
+        const id = inv.invoice_number || (inv as any).invoiceNumber || inv.id;
+        if (!id || seenIds.has(id)) continue;
+        seenIds.add(id);
+
         let dateStr = "—";
-        if (inv.issue_date || inv.created_at) {
+        const rawDate = inv.issue_date || (inv as any).issueDate || inv.created_at || (inv as any).date;
+        if (rawDate) {
           try {
-            dateStr = new Date(inv.issue_date || inv.created_at).toLocaleDateString("en-US", {
+            dateStr = new Date(rawDate).toLocaleDateString("en-US", {
               day: "2-digit",
               month: "short",
               year: "numeric",
             });
           } catch {
-            dateStr = String(inv.issue_date || inv.created_at);
+            dateStr = String(rawDate);
           }
         }
+
         let dueDateStr = "—";
-        if (inv.due_date) {
+        const rawDue = inv.due_date || (inv as any).dueDate;
+        if (rawDue) {
           try {
-            dueDateStr = new Date(inv.due_date).toLocaleDateString("en-US", {
+            dueDateStr = new Date(rawDue).toLocaleDateString("en-US", {
               day: "2-digit",
               month: "short",
               year: "numeric",
             });
           } catch {
-            dueDateStr = String(inv.due_date);
+            dueDateStr = String(rawDue);
           }
         }
+
         const amt = Number(inv.amount) || 0;
-        return {
-          id: inv.invoice_number || inv.id,
+        const tax = (inv as any).tax !== undefined ? Number((inv as any).tax) : Math.round(amt * 0.18);
+        const total = (inv as any).total !== undefined ? Number((inv as any).total) : amt + tax;
+
+        list.push({
+          id,
           date: dateStr,
           dueDate: dueDateStr,
-          product: inv.description || "Growth + WhatsApp API",
+          product: inv.description || (inv as any).product || "Growth + WhatsApp API",
           amount: amt,
-          tax: Math.round(amt * 0.18),
-          total: Math.round(amt * 1.18),
+          tax,
+          total,
           status: (inv.status || "Paid") as any,
-          paymentDate: inv.paid_date || undefined,
-        };
-      });
+          paymentDate: inv.paid_date || (inv as any).paymentDate || (inv.status === "Paid" ? dateStr : undefined),
+        });
+      }
     }
-    return customer.invoices || [];
+
+    if (Array.isArray(customer.invoices)) {
+      for (const inv of customer.invoices) {
+        if (!inv?.id || seenIds.has(inv.id)) continue;
+        seenIds.add(inv.id);
+        list.push(inv);
+      }
+    }
+
+    return list;
   }, [dbInvoices, customer.invoices]);
 
   const lifetimeBilled = invoices.reduce((sum, item) => sum + item.total, 0);
@@ -3027,6 +3050,11 @@ function Billing({
             <QuickFormDialog
               type="invoice"
               customerId={customer.id}
+              defaultValues={{
+                customerId: customer.id,
+                customerName: customer.company,
+                description: "Growth + WhatsApp API",
+              }}
               title="Create invoice"
               description="Record a new commercial invoice for this account."
               trigger={

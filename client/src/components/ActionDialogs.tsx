@@ -17,6 +17,7 @@ import { createProduct } from "@/lib/api/products";
 
 export interface QuickFormDefaultValues {
   name?: string;
+  customerName?: string;
   email?: string;
   plan?: string;
   description?: string;
@@ -199,12 +200,14 @@ export function QuickFormDialog({
       try {
         const createdInvoice = await createCustomerInvoice({
           customerId: targetCustomerId,
+          customer: defaultValues?.customerName || undefined,
+          customerName: defaultValues?.customerName || undefined,
           invoiceNumber: formName.trim() || `INV-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 900) + 100)}`,
           amount: amountNum,
-          description: formContent.trim() || undefined,
+          description: formContent.trim() || "Growth + WhatsApp API",
           dueDate: invoiceDueDate || new Date(Date.now() + 14 * 86400000).toISOString().split("T")[0],
           status: invoiceStatus || "Paid",
-        });
+        } as any);
 
         toast.success("Invoice created", {
           description: "Your invoice has been recorded in the database.",
