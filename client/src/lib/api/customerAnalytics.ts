@@ -419,18 +419,133 @@ export function mergeCustomersWithRealData(
   return result;
 }
 
+export function getCustomCustomers(): Customer[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem("sb_custom_customers");
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function createCustomer(data: {
+  company: string;
+  email?: string;
+  plan?: string;
+  phone?: string;
+}): Customer {
+  const customId = `cust-${Date.now()}`;
+  const company = data.company.trim();
+  const newCust: Customer = {
+    id: customId,
+    company: company,
+    industry: "Enterprise SaaS",
+    region: "ap-south-1",
+    initials: getInitials(company),
+    contact: {
+      name: company,
+      email:
+        data.email?.trim() ||
+        `${company.toLowerCase().replace(/[^a-z0-9]/g, "")}@superblock.chat`,
+      phone: data.phone?.trim() || "+91 98450 00000",
+    },
+    activatedAt: new Date().toLocaleDateString("en-US", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    }),
+    status: "Active" as CustomerStatus,
+    plan: data.plan || "Growth",
+    subscription: {
+      status: "Active",
+      startDate: new Date().toLocaleDateString("en-US", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      }),
+      renewalDate: "In 12 mos",
+      billingCycle: "Annual",
+      mrr: 2999,
+      contractValue: 35988,
+      paymentStatus: "Current",
+    },
+    renewal: "In 12 mos",
+    usage: {
+      messages: 100,
+      broadcasts: 5,
+      conversations: 25,
+      email: 0,
+      sms: 0,
+      whatsapp: 100,
+      api: 50,
+      automations: 10,
+      storage: 2,
+      contacts: 10,
+    },
+    offerings: [],
+    notes: [],
+    meetings: [],
+    credentials: [],
+    invoices: [],
+    activities: [
+      {
+        id: `act-${Date.now()}`,
+        time: "Just now",
+        type: "System",
+        title: "Customer record created",
+        detail: `New customer ${company} provisioned in Superblock Studio.`,
+        actor: "Admin",
+      },
+    ],
+    health: {
+      score: 85,
+      status: "Healthy",
+      usageTrend: "Stable",
+      loginFrequency: "Daily",
+      riskReason: "None",
+    },
+    owner: {
+      name: "Anika Shah",
+      initials: "AS",
+    },
+    lastActivity: "Just now",
+  };
+
+  if (typeof window !== "undefined") {
+    try {
+      const existing = getCustomCustomers();
+      existing.unshift(newCust);
+      localStorage.setItem("sb_custom_customers", JSON.stringify(existing));
+      window.dispatchEvent(
+        new CustomEvent("customer-operations-updated", {
+          detail: { newCustomer: newCust },
+        })
+      );
+    } catch (e) {
+      console.error("Failed to save custom customer", e);
+    }
+  }
+
+  return newCust;
+}
+
 /**
  * React hook to access and manage customer data.
  * Always initializes with real Superblock customers immediately so navigation and feature testing
  * (Offerings, Notes, Meetings, Billing) work without delay or blank loading states.
  */
 export function useCustomerAnalytics() {
-  const [customers, setCustomers] = useState<Customer[]>(() => {
-    if (cachedResponse?.users && cachedResponse.users.length > 0) {
-      return mergeCustomersWithRealData(cachedResponse.users, defaultAllCustomers);
+  const getMerged = useCallback((apiUsers: ApiCustomerRecord[] = cachedResponse?.users || []) => {
+    const custom = getCustomCustomers();
+    const base = [...custom, ...defaultAllCustomers];
+    if (apiUsers && apiUsers.length > 0) {
+      return mergeCustomersWithRealData(apiUsers, base);
     }
-    return defaultAllCustomers;
-  });
+    return base;
+  }, []);
+
+  const [customers, setCustomers] = useState<Customer[]>(() => getMerged());
   const [rawUsers, setRawUsers] = useState<ApiCustomerRecord[]>(() => cachedResponse?.users || []);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -440,20 +555,31 @@ export function useCustomerAnalytics() {
       const data = await fetchCustomerAnalytics(forceRefresh);
       if (data && Array.isArray(data.users) && data.users.length > 0) {
         setRawUsers(data.users);
-        setCustomers(mergeCustomersWithRealData(data.users, defaultAllCustomers));
+        setCustomers(getMerged(data.users));
       } else {
-        setCustomers(defaultAllCustomers);
+        setCustomers(getMerged());
       }
     } catch (err) {
-      setCustomers(defaultAllCustomers);
+      setCustomers(getMerged());
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [getMerged]);
 
   useEffect(() => {
     loadData();
-  }, [loadData]);
+
+    const handleUpdate = () => {
+      setCustomers(getMerged());
+    };
+
+    if (typeof window !== "undefined") {
+      window.addEventListener("customer-operations-updated", handleUpdate);
+      return () => {
+        window.removeEventListener("customer-operations-updated", handleUpdate);
+      };
+    }
+  }, [loadData, getMerged]);
 
   return {
     customers,
@@ -463,3 +589,4 @@ export function useCustomerAnalytics() {
     refresh: () => loadData(true),
   };
 }
+

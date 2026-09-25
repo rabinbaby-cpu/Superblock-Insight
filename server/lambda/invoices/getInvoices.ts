@@ -30,15 +30,34 @@ export async function getInvoicesHandler(
     ).trim();
 
     if (!customerId) {
+      const allSql = `
+        SELECT 
+          i.id::text,
+          i.customer_id::text,
+          i.invoice_number,
+          i.status,
+          i.amount::numeric,
+          i.currency,
+          i.issue_date,
+          i.due_date,
+          i.paid_date,
+          i.description,
+          i.created_at,
+          i.updated_at,
+          cd.customer_name
+        FROM public.invoices i
+        LEFT JOIN public.customers_details cd ON i.customer_id = cd.id
+        ORDER BY i.created_at DESC;
+      `;
+      const allResult = await query<InvoiceRecord & { customer_name?: string | null }>(allSql);
       return {
-        statusCode: 400,
+        statusCode: 200,
         headers: CORS_HEADERS,
         body: JSON.stringify({
-          success: false,
-          count: 0,
+          success: true,
+          count: allResult.rows.length,
           customerId: "",
-          invoices: [],
-          error: "Missing required parameter: 'customerId' (UUID or client_user_id)",
+          invoices: allResult.rows,
         } as GetInvoicesResponse),
       };
     }

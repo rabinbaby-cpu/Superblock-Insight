@@ -193,3 +193,45 @@ export function useCustomerProfile(userId?: string) {
 
   return { profile, loading, error };
 }
+
+export async function updateCustomerProfile(
+  userId: string,
+  overrides: Partial<CustomerProfileData>
+): Promise<CustomerProfileData> {
+  const current = profileCache.get(userId) || {};
+  const updated = { ...current, ...overrides };
+  profileCache.set(userId, updated);
+
+  try {
+    const res = await fetch(`/api/customers/${encodeURIComponent(userId)}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(overrides),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.data) {
+        profileCache.set(userId, data.data);
+      }
+    }
+  } catch (err) {
+    console.warn("Could not save profile overrides to server:", err);
+  }
+
+  if (typeof window !== "undefined") {
+    try {
+      const key = `sb_customer_overrides_${userId}`;
+      localStorage.setItem(key, JSON.stringify(updated));
+      window.dispatchEvent(
+        new CustomEvent("customer-operations-updated", {
+          detail: { customerId: userId, profile: updated },
+        })
+      );
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  return updated;
+}
+

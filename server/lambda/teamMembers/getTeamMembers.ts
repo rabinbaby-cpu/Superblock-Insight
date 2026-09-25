@@ -32,15 +32,29 @@ export async function getTeamMembersHandler(
     ).trim();
 
     if (!customerId) {
+      const allSql = `
+        SELECT 
+          id::text,
+          team_user_id,
+          org_user_id,
+          org_user_name,
+          name,
+          email,
+          avatar_url,
+          role,
+          created_at
+        FROM public.team_members
+        ORDER BY created_at DESC;
+      `;
+      const allResult = await query<TeamMemberRecord>(allSql);
       return {
-        statusCode: 400,
+        statusCode: 200,
         headers: CORS_HEADERS,
         body: JSON.stringify({
-          success: false,
-          count: 0,
+          success: true,
+          count: allResult.rows.length,
           customerId: "",
-          teamMembers: [],
-          error: "Missing required parameter: 'customerId' (UUID or org_user_id)",
+          teamMembers: allResult.rows,
         } as GetTeamMembersResponse),
       };
     }

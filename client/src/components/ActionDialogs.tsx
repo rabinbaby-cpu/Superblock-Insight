@@ -12,6 +12,8 @@ import { createCustomerMeeting } from "@/lib/api/meetings";
 import { createCustomerNote } from "@/lib/api/notes";
 import { createCustomerInvoice } from "@/lib/api/billing";
 import { createCustomerOffering } from "@/lib/api/offerings";
+import { createCustomer } from "@/lib/api/customerAnalytics";
+import { createProduct } from "@/lib/api/products";
 
 export interface QuickFormDefaultValues {
   name?: string;
@@ -40,6 +42,8 @@ export function QuickFormDialog({
   const [saving, setSaving] = useState(false);
   const [formName, setFormName] = useState(defaultValues?.name || "");
   const [formContent, setFormContent] = useState(defaultValues?.description || "");
+  const [customerEmail, setCustomerEmail] = useState(defaultValues?.email || "");
+  const [customerPlan, setCustomerPlan] = useState(defaultValues?.plan || "Growth");
   const [meetingDate, setMeetingDate] = useState("");
   const [meetingOwner, setMeetingOwner] = useState("Anika Shah");
   const [invoiceAmount, setInvoiceAmount] = useState("");
@@ -50,13 +54,15 @@ export function QuickFormDialog({
     if (open) {
       setFormName(defaultValues?.name || "");
       setFormContent(defaultValues?.description || "");
+      setCustomerEmail(defaultValues?.email || "");
+      setCustomerPlan(defaultValues?.plan || "Growth");
       setMeetingDate("");
       setMeetingOwner("Anika Shah");
       setInvoiceAmount("");
       setInvoiceStatus("Paid");
       setInvoiceDueDate(new Date(Date.now() + 14 * 86400000).toISOString().split("T")[0]);
     }
-  }, [open, defaultValues?.name, defaultValues?.description]);
+  }, [open, defaultValues?.name, defaultValues?.description, defaultValues?.email, defaultValues?.plan]);
 
   const save = async () => {
     if (type === "note") {
@@ -267,6 +273,61 @@ export function QuickFormDialog({
       return;
     }
 
+    if (type === "customer") {
+      if (!formName.trim()) {
+        toast.error("Company name is required");
+        return;
+      }
+      setSaving(true);
+      try {
+        const newCust = createCustomer({
+          company: formName.trim(),
+          email: customerEmail.trim() || undefined,
+          plan: customerPlan,
+        });
+        toast.success("Customer created", {
+          description: `${newCust.company} has been added to your customers directory.`,
+        });
+        setOpen(false);
+        setFormName("");
+        setCustomerEmail("");
+      } catch (err: any) {
+        toast.error(err?.message || "Failed to create customer");
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+
+    if (type === "product") {
+      if (!formName.trim()) {
+        toast.error("Product name is required");
+        return;
+      }
+      setSaving(true);
+      try {
+        await createProduct({
+          name: formName.trim(),
+          description: formContent.trim() || "Superblock Platform Capability",
+          status: "Active",
+          price: 2999,
+          category: "Channel",
+          model: "Usage based",
+        });
+        toast.success("Product created", {
+          description: "New product added to catalog.",
+        });
+        setOpen(false);
+        setFormName("");
+        setFormContent("");
+      } catch (err: any) {
+        toast.error(err?.message || "Failed to create product");
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+
     setSaving(true);
     window.setTimeout(() => {
       setSaving(false);
@@ -286,7 +347,7 @@ export function QuickFormDialog({
         <DialogHeader><DialogTitle>{title}</DialogTitle><DialogDescription>{description}</DialogDescription></DialogHeader>
         <div className="grid gap-4 py-1">
           <div className="grid gap-1.5"><Label htmlFor={`${title}-name`} className="text-xs">{type === "meeting" ? "Meeting title" : type === "note" ? "Note title" : type === "invoice" ? "Invoice number" : type === "customer" ? "Company name" : "Name"}</Label><Input id={`${title}-name`} value={formName} onChange={(e) => setFormName(e.target.value)} placeholder={type === "meeting" ? "Q4 strategy review" : type === "note" ? "Add a clear title" : type === "invoice" ? "INV-2026-002 (optional)" : "Enter a name"} /></div>
-          {type === "customer" && <div className="grid grid-cols-2 gap-3"><div className="grid gap-1.5"><Label className="text-xs">Contact email</Label><Input type="email" defaultValue={defaultValues?.email} placeholder="owner@company.com" /></div><div className="grid gap-1.5"><Label className="text-xs">Plan</Label><Select defaultValue={defaultValues?.plan || "growth"}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="starter">Starter</SelectItem><SelectItem value="growth">Growth</SelectItem><SelectItem value="advanced">Advanced</SelectItem></SelectContent></Select></div></div>}
+          {type === "customer" && <div className="grid grid-cols-2 gap-3"><div className="grid gap-1.5"><Label className="text-xs">Contact email</Label><Input type="email" value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} placeholder="owner@company.com" /></div><div className="grid gap-1.5"><Label className="text-xs">Plan</Label><Select value={customerPlan} onValueChange={setCustomerPlan}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Starter">Starter</SelectItem><SelectItem value="Growth">Growth</SelectItem><SelectItem value="Enterprise">Enterprise</SelectItem></SelectContent></Select></div></div>}
           {type === "meeting" && (
             <div className="grid grid-cols-2 gap-3">
               <div className="grid gap-1.5">

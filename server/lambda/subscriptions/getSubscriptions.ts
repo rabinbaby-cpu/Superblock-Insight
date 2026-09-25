@@ -30,15 +30,35 @@ export async function getSubscriptionsHandler(
     ).trim();
 
     if (!customerId) {
+      const allSql = `
+        SELECT 
+          s.id::text,
+          s.customer_id::text,
+          s.plan_id::text,
+          s.status,
+          s.start_date,
+          s.end_date,
+          s.amount::numeric,
+          s.currency,
+          s.billing_interval,
+          s.created_at,
+          s.updated_at,
+          p.name as plan_name,
+          cd.customer_name
+        FROM public.subscriptions s
+        LEFT JOIN public.plans p ON s.plan_id = p.id
+        LEFT JOIN public.customers_details cd ON s.customer_id = cd.id
+        ORDER BY s.created_at DESC NULLS LAST;
+      `;
+      const allResult = await query<SubscriptionRecord & { plan_name: string | null; customer_name?: string | null }>(allSql);
       return {
-        statusCode: 400,
+        statusCode: 200,
         headers: CORS_HEADERS,
         body: JSON.stringify({
-          success: false,
-          count: 0,
+          success: true,
+          count: allResult.rows.length,
           customerId: "",
-          subscriptions: [],
-          error: "Missing required parameter: 'customerId' (UUID or client_user_id)",
+          subscriptions: allResult.rows,
         } as GetSubscriptionsResponse),
       };
     }

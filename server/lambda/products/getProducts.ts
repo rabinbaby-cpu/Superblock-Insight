@@ -30,15 +30,24 @@ export async function getProductsHandler(
     ).trim();
 
     if (!customerId) {
+      const allSql = `
+        SELECT 
+          id, client_id, client_user_id, name, description, category, hsn,
+          barcode_type, barcode_value, billing, cost::numeric, currency,
+          active, created_by, created_at, updated_at, price::numeric,
+          sku, margin, tax_rate::numeric, unit, track_inventory, stock::numeric
+        FROM public.products
+        ORDER BY created_at DESC;
+      `;
+      const allResult = await query<ProductRecord>(allSql);
       return {
-        statusCode: 400,
+        statusCode: 200,
         headers: CORS_HEADERS,
         body: JSON.stringify({
-          success: false,
-          count: 0,
+          success: true,
+          count: allResult.rows.length,
           customerId: "",
-          products: [],
-          error: "Missing required parameter: 'customerId' (UUID or client_user_id)",
+          products: allResult.rows,
         } as GetProductsResponse),
       };
     }
